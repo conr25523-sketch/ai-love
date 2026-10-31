@@ -149,7 +149,7 @@ export default function Home() {
     const returnToLanding = () => {
       setSession(null); setMessages([]); setDraft(""); setRetry(null);
       setName(""); setConsent(false); setConsentAdmin(false); setModal(false);
-      window.location.replace("/");
+      window.location.replace(homeUrl);
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key === LOGOUT_EVENT && event.newValue) returnToLanding();
@@ -236,7 +236,7 @@ export default function Home() {
       setCardSelections({}); cardSelectionLocks.current.clear();
       // Signal other guest tabs without storing names or conversation content.
       try { localStorage.setItem(LOGOUT_EVENT, crypto.randomUUID()); } catch { /* Server-side chat access is still suspended when browser storage is blocked. */ }
-      window.location.replace("/");
+      window.location.replace(homeUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "ออกจากระบบไม่สำเร็จ ลองอีกครั้งได้เลย");
       setLoggingOut(false); setBusy(false); setMenuOpen(false);
