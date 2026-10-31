@@ -8,9 +8,9 @@ This checkout contains the full Moonmind source tree. The original repository up
 - Application and backend: https://moonmind-inner-orbit.superskunk.chatgpt.site/
 - Administrator page: https://moonmind-inner-orbit.superskunk.chatgpt.site/admin
 
-The root `index.html` takes visitors from GitHub Pages to the hosted application. The application runs on Sites with a Worker and D1 database; GitHub Pages serves only the entry page. Guest visitors use the nickname flow. Administrator access requires the configured owner's authenticated account.
+The chat interface runs directly on GitHub Pages and stays at the github.io URL. The generated root `index.html` loads `pages-assets/`. A separate guest-only API on Sites stores messages in D1. Browser sessions use a private random secret saved on the GitHub Pages origin, so third-party cookies are not required. The administrator page runs on the backend host and requires the configured owner's authenticated account.
 
-Uploading source to GitHub does not automatically update the hosted application. Changes to the application must also be built and deployed to its backend host.
+After changing the interface, run `npm run build:pages` and commit the generated root `index.html` and `pages-assets/` along with the source. Keep GitHub Pages configured to publish from main / (root). Changes to the guest API must also be built and deployed to its backend host. Old hashed assets can stay until existing browser sessions no longer use them.
 
 ## Run on your computer
 
@@ -19,4 +19,3 @@ Install Node.js 24 or later, run `npm ci`, then `npm run local`, or use `Start-M
 The current conversation engine uses local rules. Hosting it does not turn it into a generative model or add external AI usage charges.
 
 Do not upload .dev.vars, database files, node_modules, runtime state or credentials.
-

@@ -6,6 +6,7 @@
     "node": ">=24.0.0"
   },
   "scripts": {
+    "build:pages": "node scripts/build-pages.mjs",
     "install:ci": "node scripts/install-ci.mjs",
     "local": "node scripts/local.mjs",
     "local:check": "node scripts/local.mjs --check",
