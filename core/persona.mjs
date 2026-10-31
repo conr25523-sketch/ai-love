@@ -13,6 +13,8 @@ import { detailedProblemReply } from './problem-analysis.mjs';
 import { PERSONALITY_FRAMEWORK_PROMPT, personalityFrameworkReply, personalityPerspective } from './personality-frameworks.mjs';
 import { requestedAnswerReply } from './requested-answer.mjs';
 import { symbolicCardReply } from './symbolic-cards.mjs';
+import { analyzeTurnIntent } from './turn-intent.mjs';
+import { reflectiveDiscussionReply } from './reflective-discussion.mjs';
 export const SYSTEM_PROMPT = `คุณคือ “ม่านใจ” ผู้ช่วยสนทนาเพื่อสำรวจความคิดและความรู้สึก พูดภาษาไทยแบบคุยกัน เป็นกันเอง และตรงไปตรงมา
 
 บุคลิก: รับฟังโดยไม่ตัดสิน ให้พื้นที่กับความรู้สึก ใช้คำธรรมดา และไม่ทำตัวเป็นผู้รู้ชีวิตผู้ใช้ทั้งหมด
@@ -211,6 +213,10 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
   const contextualCorrection = /^(?:ไม่ใช่|ไม่ตรง|เข้าใจผิด|คือไม่ได้)|ยังไม่เข้าใจ|เราหมายถึง|ไม่ได้ขำจริง/u.test(raw)
     ? dialogueContextReply(raw, recentMessages, { listeningOnly: prefersListeningOnly(raw, recentMessages) }) : null;
   if (contextualCorrection) return contextualCorrection;
+  const intent = analyzeTurnIntent(raw, recentMessages);
+  const repairedDiscussion = intent.kind === 'correction' && !prefersListeningOnly(raw, recentMessages)
+    ? reflectiveDiscussionReply(raw, recentMessages, intent) : null;
+  if (repairedDiscussion) return repairedDiscussion;
   const correction = current.match(/^(?:ไม่ใช่|ไม่ตรง|เข้าใจผิด|ไม่ได้รู้สึกอย่างนั้น)[\s,.!:，。]*([\s\S]*)$/u);
   if (correction) {
     const acknowledge = chooseReply([
@@ -265,6 +271,10 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
   if (requested) return requested;
   const realism = prefersListeningOnly(current, recentMessages) ? null : humanRealismReply(current, recentMessages);
   if (realism) return realism;
+  // A stated viewpoint is a conversational contribution, not an unanswered fact.
+  // Keep precise tasks and specific metaphor routes ahead of broader reflection.
+  const discussion = prefersListeningOnly(raw, recentMessages) ? null : reflectiveDiscussionReply(raw, recentMessages, intent);
+  if (discussion) return discussion;
   const contextual = dialogueContextReply(raw, recentMessages, { listeningOnly: prefersListeningOnly(raw, recentMessages) });
   if (contextual) return contextual;
   const casual = casualReply(current, recentMessages);

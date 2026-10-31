@@ -62,6 +62,19 @@ test('persisted delivery answers math and appearance imagery without unrelated c
   assert.doesNotMatch(metaphor, /เมนู|เลือกกิน|หิว|มื้อ|ข้าวผัด|สงบจิตใจ/);
 });
 
+test('persisted opinion receives a relevant discussion and followups keep its topic', async t => {
+  const chat = conversation(); t.after(() => chat.close()); await chat.start();
+  await chat.say('12+12=');
+  const reply = await chat.say('ชีวิตย่อมมีอุปสรรคแต่ตราบใดที่มีเป้าหมาย คนเราจะไม่ให้คนสนิทมาควบคุมอิสระของเรา เราจะเลือกเดินด้วยแข้งขาตัวเอง');
+  assert.match(reply, /อิสระ|ตัดสินใจ|เลือกทาง|เลือกเอง|สิทธิ์เลือก/);
+  assert.doesNotMatch(reply, /ไม่รู้คำตอบ|สรุปให้แบบมั่นใจไม่ได้|รายละเอียดไม่พอ|เมนู|สงบจิตใจ/);
+  const expanded = await chat.say('ขยายอีก');
+  assert.match(expanded, /อิสระ|ตัดสินใจ|เลือก|รับผิดชอบ/);
+  assert.notEqual(expanded, reply);
+  assert.doesNotMatch(expanded, /ไม่รู้คำตอบ|รายละเอียดไม่พอ|เรื่องงานหรือการเรียน/);
+  assert.equal(await chat.say('4545454-45='), '4545454-45 = 4545409');
+});
+
 test('persisted delivery drafts from the corrected issue rather than an earlier assistant assumption', async t => {
   const chat = conversation(); t.after(() => chat.close()); await chat.start();
   await chat.say('แฟนลืมมารับเรา พอเราบอกว่าเสียใจเขากลับบอกว่าเรื่องแค่นี้เอง');

@@ -5,6 +5,56 @@ const HARM = /ฆ่าตัวตาย|ทำร้าย|อยากตา�
 const STOP = /^(?:หยุด|พอแล้ว|ไม่อยากคุย|ข้าม|ขอพัก)[.!?\s]*$/u;
 const TOPIC_CHANGE = /เปลี่ยนเรื่อง|อีกเรื่อง(?:หนึ่ง)?|ไม่คุยเรื่องนี้|เลิกพูดเรื่องนี้/u;
 const CORRECTION = /^(?:ไม่ใช่|ไม่ตรง|เข้าใจผิด|คือไม่ได้)|ยังไม่เข้าใจ|เราหมายถึง|ฉันหมายถึง|ผมหมายถึง|ไม่ได้ขำจริง|ไม่ได้(?:ติด|โกรธ|เสียใจ|กลัว).{0,35}(?:แต่|แค่)/u;
+const FOLLOWUP = /^(?:(?:แล้ว|งั้น|อืม|เออ|อ๋อ)[\s,]*)?(?:(?:ไง|ยังไง|อย่างไร|ทำไง)ต่อ|มันเกี่ยวกันยังไง|ต่อ(?:เลย|หน่อย|อีก)?|พูดต่อ|ขยาย(?:ความ)?(?:อีก)?(?:หน่อย|ให้หน่อย|ต่อ)?|อธิบาย(?:เพิ่ม|อีก|ต่อ|หน่อย|ให้เข้าใจง่าย|ให้หน่อย)(?:หน่อย)?|หมายถึง(?:อะไร|ยังไง)|หมายความว่า(?:ไง|ยังไง|อย่างไร)|แปลว่า(?:ไง|ยังไง)|เพราะอะไร|ทำไม(?:ล่ะ|อะ|อ่ะ|เหรอ)?|(?:ที่พูด|เมื่อกี้)(?:หมายถึง|คือ)(?:อะไร|ยังไง)|ยกตัวอย่าง(?:หน่อย|ให้หน่อย)?)(?:\s*(?:นะ|อะ|อ่ะ|ครับ|ค่ะ|คะ|ดิ|สิ|ได้ไหม|ได้มั้ย))?[\s.!?？]*$/u;
+
+/** A source-aware frame for responders that discuss ideas outside issue templates.
+ * User statements are evidence; assistant prose is only a conversational reference.
+ * A new standalone turn replaces the active source instead of accumulating biography.
+ */
+export function buildConversationFrame(text, messages = []) {
+  const current = clean(text);
+  const history = Array.isArray(messages) ? messages.slice(-32).flatMap(message => {
+    const role = typeof message === 'string' ? 'user' : message?.role;
+    const content = clean(typeof message === 'string' ? message : message?.content ?? message?.text);
+    return content && ['user', 'assistant'].includes(role) ? [{ role, content }] : [];
+  }) : [];
+  if (history.at(-1)?.role === 'user' && history.at(-1)?.content === current) history.pop();
+  let sourceStatement = '';
+  let userStatements = [];
+  let followupDepth = 0;
+  for (const message of history) {
+    if (message.role !== 'user') continue;
+    if (TOPIC_CHANGE.test(message.content) || STOP.test(message.content)) {
+      sourceStatement = ''; userStatements = []; followupDepth = 0;
+    }
+    if (FOLLOWUP.test(message.content)) {
+      if (sourceStatement) followupDepth++;
+    } else if (!STOP.test(message.content)) {
+      sourceStatement = message.content;
+      userStatements = [message.content];
+      followupDepth = 0;
+    }
+  }
+  const previousUserStatement = sourceStatement;
+  const correction = CORRECTION.test(current);
+  const explicitTopicShift = TOPIC_CHANGE.test(current) || STOP.test(current);
+  const isFollowup = FOLLOWUP.test(current) && !explicitTopicShift && !correction;
+  if (explicitTopicShift) { sourceStatement = ''; userStatements = []; followupDepth = 0; }
+  if (!isFollowup && current && !STOP.test(current)) {
+    sourceStatement = current;
+    userStatements = [current];
+    followupDepth = 0;
+  } else if (isFollowup && sourceStatement) followupDepth++;
+  const lastAssistant = history.findLast(message => message.role === 'assistant')?.content || '';
+  const intent = correction ? 'correction' : isFollowup
+    ? /หมายความ|แปลว่า|หมายถึง|คืออะไร|เข้าใจง่าย/u.test(current) ? 'explain'
+      : /ขยาย|อธิบาย|ตัวอย่าง/u.test(current) ? 'expand' : 'continue'
+    : 'statement';
+  return { current, intent, correction, explicitTopicShift, previousUserStatement,
+    sourceStatement, userStatements, lastAssistant,
+    referenceAssistant: isFollowup && sourceStatement ? lastAssistant : '',
+    isFollowup, followupDepth };
+}
 const ASSISTANT_IDENTITY = /mbti|enneagram|ลักษณ์|ไทป์|เป็นเอไอ|เป็น\s*ai|อ่านใจ|system\s*prompt/iu;
 const VISION = /สายตา(?:สั้น|ยาว|เอียง)|(?:หมอ|จักษุ|ตรวจตา).{0,25}สายตา/u;
 const DENIES_EASY_WORK = /งาน(?:มัน)?ไม่(?:ได้)?ง่าย|ไม่(?:ได้)?เบื่อเพราะงานง่าย/u;

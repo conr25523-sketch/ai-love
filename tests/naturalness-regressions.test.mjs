@@ -15,6 +15,46 @@ function conversation() {
   };
 }
 
+test('a viewpoint about choosing one’s life invites discussion rather than a factual refusal', async () => {
+  const say = conversation();
+  await say('4545454-45=');
+  const reply = await say('เราว่าคนที่บ้านไม่จำเป็นต้องเห็นด้วยกับทางที่เราเลือก ขอแค่ไม่บังคับให้เราใช้ชีวิตตามความฝันของเขาก็พอ');
+  assert.match(reply, /เลือก|ตัดสินใจ|อิสระ|ความฝัน/);
+  assert.doesNotMatch(reply, /ไม่รู้คำตอบ|รายละเอียดไม่พอ|สรุปให้แบบมั่นใจไม่ได้|สงบจิตใจ|เมนู/);
+  assert.ok(reply.length > 100);
+  const followup = await say('หมายความว่าไง');
+  assert.notEqual(followup, reply);
+  assert.match(followup, /เลือก|ตัดสินใจ|อิสระ|รับผิดชอบ/);
+  assert.equal(await say('7*(3+2)='), '7*(3+2) = 35');
+});
+
+test('a new discussion does not preserve a previous life theme after a concrete topic shift', async () => {
+  const say = conversation();
+  await say('เราคิดว่าการเลือกชีวิตเองต้องยอมรับผลของทางที่เลือก ไม่ใช่ให้คนอื่นควบคุม');
+  await say('เปลี่ยนเรื่อง วันนี้กินอะไรดี');
+  const reply = await say('ขยายอีก');
+  assert.doesNotMatch(reply, /เสรีภาพ|ยกสิทธิ์ตัดสินใจ|ความโกรธ|คำยอมรับ|พิสูจน์ว่าเขาผิด/);
+});
+
+test('corrected autonomy can be explained without reviving a rejected motive', async () => {
+  const say = conversation();
+  await say('เราว่าคนเราควรเลือกชีวิตเอง แม้คนอื่นจะพยายามควบคุม');
+  await say('ไม่ได้โกรธใคร แค่ไม่อยากให้คนอื่นตัดสินใจแทน');
+  const reply = await say('หมายความว่าไง');
+  assert.match(reply, /ตัดสินใจ|เลือก|สิทธิ์/);
+  assert.doesNotMatch(reply, /ไม่รู้คำตอบ|คุณโกรธ|ลึก.*โกรธ|อยากเอาชนะ/);
+});
+
+test('an explicit topic change with new opinion content receives that opinion', async () => {
+  const say = conversation();
+  await say('เราว่าคนขยันมีโอกาสไม่เท่ากัน โลกไม่ยุติธรรม');
+  const reply = await say('เปลี่ยนเรื่อง เราคิดว่าคนเราควรเลือกชีวิตเอง ไม่ให้ใครมาบังคับ');
+  assert.match(reply, /ตัดสินใจ|อิสระ|เลือกเอง|สิทธิ์/);
+  assert.doesNotMatch(reply, /ไม่รู้คำตอบ|ได้ลงมือทำจริงแล้ว/);
+  const more = await say('อ๋อ ขยายอีกหน่อย');
+  assert.match(more, /ตัดสินใจ|เลือก|อิสระ|ความเห็น/);
+});
+
 test('direct arithmetic survives an emotional context without compulsory coaching', async () => {
   const say = conversation();
   await say('วันนี้เหนื่อยอะ');

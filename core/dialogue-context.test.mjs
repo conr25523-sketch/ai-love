@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDialogueContext, dialogueContextReply, dialogueContextFallback } from './dialogue-context.mjs';
+import { buildConversationFrame, buildDialogueContext, dialogueContextReply, dialogueContextFallback } from './dialogue-context.mjs';
 import { buildReflectionReply } from './persona.mjs';
 
 function conversation() {
@@ -11,6 +11,77 @@ function conversation() {
     return reply;
   } };
 }
+
+test('discussion frame continues a user idea without adopting assistant guesses as evidence', () => {
+  const idea = 'เราว่าการเดินตามเป้าหมายคือการเลือกทางของตัวเอง ไม่ใช่ให้คนอื่นควบคุม';
+  const history = [
+    { role: 'user', content: idea },
+    { role: 'assistant', content: 'คุณคงทะเลาะกับครอบครัวและไม่มีใครสนับสนุน' },
+  ];
+  const frame = buildConversationFrame('แล้วไงต่อ', history);
+  assert.equal(frame.intent, 'continue');
+  assert.equal(frame.sourceStatement, idea);
+  assert.deepEqual(frame.userStatements, [idea]);
+  assert.doesNotMatch(frame.sourceStatement, /ทะเลาะ|ครอบครัว/u);
+  assert.match(frame.referenceAssistant, /ครอบครัว/u);
+  assert.equal(frame.followupDepth, 1);
+  history.push({ role: 'user', content: 'แล้วไงต่อ' }, { role: 'assistant', content: 'เลือกสิ่งที่เรายอมรับผลของมันได้' });
+  assert.equal(buildConversationFrame('ขยายอีก', history).followupDepth, 2);
+  assert.equal(buildConversationFrame('หมายความว่าไง', history).intent, 'explain');
+});
+
+test('discussion frame makes an explicit correction the new source rather than repeating a rejected claim', () => {
+  const history = [
+    { role: 'user', content: 'เราอยากเลือกชีวิตเอง' },
+    { role: 'assistant', content: 'คุณต้องการพิสูจน์ว่าคนอื่นผิด' },
+  ];
+  const corrected = 'ไม่ใช่ เราหมายถึงเราอยากรับผิดชอบสิ่งที่เราเลือก ไม่ได้อยากเอาชนะใคร';
+  const frame = buildConversationFrame(corrected, history);
+  assert.equal(frame.correction, true);
+  assert.equal(frame.sourceStatement, corrected);
+  assert.equal(frame.previousUserStatement, 'เราอยากเลือกชีวิตเอง');
+  assert.equal(frame.referenceAssistant, '');
+  history.push({ role: 'user', content: corrected }, { role: 'assistant', content: 'อ๋อ ประเด็นคือความรับผิดชอบ' });
+  assert.equal(buildConversationFrame('อธิบายเพิ่ม', history).sourceStatement, corrected);
+});
+
+test('discussion followups attach to the latest standalone topic and do not resurrect a closed discussion', () => {
+  const history = [
+    { role: 'user', content: 'เราคิดว่าความพยายามไม่ได้รับประกันความสำเร็จ' },
+    { role: 'assistant', content: 'โอกาสและต้นทุนต่างกัน' },
+    { role: 'user', content: 'อีกเรื่อง เราวาดรูปแล้วสีดูหม่น' },
+    { role: 'assistant', content: 'ลองดูความสว่างของจุดเด่น' },
+  ];
+  const frame = buildConversationFrame('ยกตัวอย่างหน่อย', history);
+  assert.match(frame.sourceStatement, /วาดรูป/u);
+  assert.doesNotMatch(frame.sourceStatement, /พยายาม|สำเร็จ/u);
+  assert.equal(frame.intent, 'expand');
+  assert.equal(buildConversationFrame('เปลี่ยนเรื่อง คุยเรื่องความรัก', history).explicitTopicShift, true);
+  history.push({ role: 'user', content: 'หยุด' }, { role: 'assistant', content: 'ได้เลย' });
+  assert.equal(buildConversationFrame('แล้วไงต่อ', history).sourceStatement, '');
+  assert.equal(buildConversationFrame('แล้วไงต่อ', history).referenceAssistant, '');
+});
+
+test('discussion frame handles persisted current turns and does not mistake substantive new statements for followups', () => {
+  const history = [{ role: 'user', content: 'เราคิดว่าคนเราควรเลือกชีวิตเอง' },
+    { role: 'assistant', content: 'การเลือกมาพร้อมความรับผิดชอบ' },
+    { role: 'user', content: 'หมายความว่าไง' }];
+  assert.equal(buildConversationFrame('หมายความว่าไง', history).sourceStatement, 'เราคิดว่าคนเราควรเลือกชีวิตเอง');
+  assert.equal(buildConversationFrame('แล้วเราจะกินอะไรดี', history).isFollowup, false);
+  assert.equal(buildConversationFrame('แล้วเราจะกินอะไรดี', history).sourceStatement, 'แล้วเราจะกินอะไรดี');
+  assert.equal(buildConversationFrame('ขยายอีก', [{ role: 'assistant', content: 'คุณเกลียดครอบครัว' }]).sourceStatement, '');
+});
+
+test('short reasoning and expansion followups retain the same user idea as the intent analyzer', () => {
+  const statement = 'เราคิดว่าความพยายามไม่ได้รับประกันความสำเร็จ เพราะแต่ละคนมีต้นทุนไม่เท่ากัน';
+  const history = [{ role: 'user', content: statement }, { role: 'assistant', content: 'โอกาสกับแรงสนับสนุนมีผลด้วย' }];
+  for (const text of ['เพราะอะไร', 'ทำไม', 'ทำไมล่ะ', 'พูดต่อ', 'หมายถึงอะไร', 'อ๋อ ขยายอีกหน่อย', 'แล้วมันเกี่ยวกันยังไง']) {
+    const frame = buildConversationFrame(text, history);
+    assert.equal(frame.isFollowup, true, text);
+    assert.equal(frame.sourceStatement, statement, text);
+  }
+  assert.equal(buildConversationFrame('ทำไมเพื่อนเราถึงไม่ตอบแชท', history).isFollowup, false);
+});
 
 test('career continuity follows curiosity and uses the actual reported skill', () => {
   const c = conversation();
