@@ -1,5 +1,6 @@
 import { chooseReply } from './reply-variety.mjs';
 import { MBTI_TYPES, ENNEAGRAM_TYPES, statedPersonalityTypes } from './personality-frameworks.mjs';
+import { arithmeticReply } from './arithmetic.mjs';
 
 const clean = value => typeof value === 'string' ? value.slice(0, 4000).normalize('NFC').trim() : '';
 const BLOCK = /^(?:ไม่ใช่|ไม่ตรง|เข้าใจผิด|ไม่ได้รู้สึกอย่างนั้น)|ฆ่า|ทำร้าย|อยากตาย|ไม่อยากอยู่|ไม่อยากมีชีวิต|อยากหายไป|ขิต|ตุย|ยาเกินขนาด|วินิจฉัย|รักษา|โรค|คดี|ลงทุน|หยุด|พอแล้ว|ไม่อยากคุย|ไม่ต้องวิเคราะห์|อย่าวิเคราะห์|อย่าเดา|ไม่เอา.*(?:mbti|ไทป์)|สมมติ|ตัวอย่าง|นิยาย|ignore.{0,20}instructions|system\s*prompt/iu;
@@ -90,10 +91,69 @@ function guessedMbti(current, statements, messages, explaining = false, previous
   ], messages);
 }
 
+// Drafts use what the user actually said, never an event inferred by the bot.
+function practicalRequest(current, messages) {
+  const history = (Array.isArray(messages) ? messages : []).slice(-12)
+    .filter(message => message?.role === 'user').map(message => clean(message.content ?? message.text))
+    .filter(value => value && value !== current);
+  const drafting = /(?:ช่วย|ลอง|ขอ|อยากให้).{0,16}(?:เขียน|ร่าง|พิมพ์).{0,30}(?:ข้อความ|ส่ง|บอก|หา)|(?:เขียน|ร่าง)(?:ข้อความ)?ให้(?:เรา|หน่อย)/u.test(current);
+  const shortening = /^(?:ขอ|เอา|ช่วย|ทำให้|ปรับให้)?(?:แบบ)?(?:สั้น(?:ลง|ๆ|กว่านี้)|กระชับ)(?:อีก|หน่อย|ได้ไหม|ได้มั้ย|นะ|ครับ|ค่ะ|\s|[?？])*$/u.test(current);
+  if (shortening) {
+    const previous = [...(Array.isArray(messages) ? messages : [])].reverse().find(message => message?.role === 'assistant');
+    const quote = clean(previous?.content ?? previous?.text).match(/“([^”]+)”/u)?.[1];
+    if (quote) {
+      if (/ยุ่งกับงาน/u.test(quote) && /รอเก้อ/u.test(quote)) return '“ถ้าเธอยุ่ง บอกเราสั้น ๆ ว่าไว้ค่อยคุยก็ได้นะ เราจะได้ไม่รอเก้อ”';
+      const parts = quote.split(/(?<=[.!?])\s+|\n|\s+(?=อยากให้|เราอยาก|ขอให้|แต่)/u).filter(Boolean);
+      const shortened = parts.length > 2 ? [parts[0], parts.at(-1)].join(' ') : quote;
+      return `“${shortened}”`;
+    }
+  }
+  if (drafting) {
+    const direct = current.match(/(?:บอก(?:เขา|แฟน|เพื่อน)?ว่า|ส่ง(?:หา|ให้)(?:เขา|แฟน|เพื่อน)ว่า|ข้อความว่า)\s*(.+)$/u)?.[1];
+    if (direct) return `ลองส่งว่า:\n“${direct.replace(/^[“"']|[”"']$/gu, '').trim()}”`;
+    const userEvent = [...history].reverse().find(value => !/(?:ช่วย|ขอ).{0,12}(?:เขียน|ร่าง|สรุป)|^(?:ขอบคุณ|โอเค|อ๋อ|อืม|555)/u.test(value));
+    const recentUserFacts = history.slice(-4).join('\n');
+    if (/แฟน|คนคุย/u.test(recentUserFacts) && /อ่านไม่ตอบ|ไม่ตอบ|รอ.{0,6}ตอบ/u.test(recentUserFacts) && /งาน.{0,12}(?:ไม่เสร็จ|ยังไม่เสร็จ)|ยุ่ง/u.test(userEvent ?? '')) {
+      return `“ถ้าเธอยุ่งกับงานอยู่ บอกเราสั้น ๆ ก็ได้นะว่าไว้ค่อยคุยกัน ${/น้อยใจ/u.test(recentUserFacts) ? 'เราน้อยใจที่รอแล้วไม่รู้ว่าจะได้คุยตอนไหน' : 'เราจะได้รู้ว่าไว้ค่อยคุยกัน'} จะได้ไม่รอเก้อ”`;
+    }
+    if (userEvent && /เรื่องแค่นี้|เรื่องเล็ก|คิดมาก|เว่อร์|งี่เง่า|ความรู้สึก.{0,12}(?:ไร้สาระ|ไม่สำคัญ)/u.test(userEvent) && /เสียใจ|เสียความรู้สึก|ไม่โอเค|ติดใจ|ติดที่|โกรธ|เจ็บ/u.test(userEvent)) {
+      const correction = /ไม่ได้.{0,20}(?:ลืม|โกรธ|มารับ)|ไม่ใช่.{0,20}(?:ลืม|มารับ)/u.test(userEvent);
+      const dismissed = /ไร้สาระ/u.test(userEvent) ? 'ไร้สาระ' : /ไม่สำคัญ/u.test(userEvent) ? 'ไม่สำคัญ' : 'เป็นเรื่องเล็ก';
+      return `ลองส่งแบบตรง ๆ ได้ว่า:\n“${correction ? `ที่เราติดใจคือเธอทำเหมือนความรู้สึกเรา${dismissed}` : `เราเสียใจกับสิ่งที่เกิดขึ้น และยิ่งเสียความรู้สึกเมื่อเธอทำเหมือนมัน${dismissed}`} เราอยากให้เธอฟังว่าอะไรทำให้เราไม่โอเค โดยไม่รีบตัดสินว่าเราคิดมาก”`;
+    }
+    if (userEvent) return `ลองส่งโดยใช้เรื่องที่คุณเพิ่งเล่า:\n“${userEvent.replace(/^(?:คือ|อ๋อ|เออ)\s*/u, '').replace(/[“”]/gu, '')} เราอยากคุยเรื่องนี้ให้เข้าใจกัน”`;
+    return 'ใช้เป็นข้อความตั้งต้นได้ว่า:\n“มีเรื่องหนึ่งที่เราอยากคุยให้เข้าใจกัน อยากให้ฟังมุมของเราก่อน แล้วเราก็อยากฟังมุมของเธอด้วย”';
+  }
+  const studyRequest = /(?:ควร|แนะนำ|เลือก|จะ|อยาก|ไม่รู้.{0,4}จะ).{0,12}(?:เรียน|คณะ|สาย)|(?:เรียน|คณะ|สาย).{0,15}(?:อะไร|ไหนดี|ตัวเลือก)/u.test(current);
+  const explicitOptions = /(?:ขอ|ตอบ|ยก|แนะนำ|เอา|อยากได้|มี).{0,16}(?:ตัวเลือก|เป็นข้อ|ลิสต์)|ยกตัวอย่าง|แนะนำ.{0,8}(?:คณะ|สาย)/u.test(current);
+  const asksOptions = explicitOptions || !/ไม่(?:รู้|รุ้|แน่ใจ)/u.test(current) && /ควรเรียนอะไร|เรียน(?:อะไร|คณะไหน)ดี/u.test(current);
+  if (studyRequest && asksOptions) {
+    const context = [...history.slice(-4), current].join('\n');
+    const maths = /คณิต|แก้โจทย์|ตัวเลข/u.test(context);
+    const discovery = /ท้าทาย|ค้นพบ|เรียนรู้|รู้อะไรใหม่|สิ่งที่ไม่รู้|สิ่งที่ไม่รุ้/u.test(context);
+    const reasoning = maths || discovery;
+    return [
+      `ถ้าให้ยกตัวเลือก${reasoning ? 'จากเรื่องที่คุณเล่า' : 'สำหรับเริ่มเปรียบเทียบ'} เราเสนอ 3 ทางนี้:`,
+      reasoning ? '1. วิทยาการคอมพิวเตอร์ — ลองเขียนโปรแกรมเล็ก ๆ ดูก่อนว่าเพลินกับการแก้ปัญหาและลองผิดลองถูกไหม' : '1. วิทยาการคอมพิวเตอร์ — เหมาะเป็นทางให้ลอง หากสนใจเทคโนโลยีและการแก้ปัญหา',
+      maths ? '2. สถิติหรือวิทยาการข้อมูล — ลองวิเคราะห์ข้อมูลเรื่องที่สนใจ แล้วดูว่าชอบหาคำตอบจากตัวเลขไหม' : '2. นิเทศศาสตร์หรือการออกแบบ — เป็นทางให้ลอง หากชอบเล่าเรื่อง สื่อสาร หรือสร้างผลงาน',
+      discovery ? '3. วิทยาศาสตร์หรือสายวิจัย — ลองอ่านงานหรือทำโครงงานเล็ก ๆ เพื่อดูว่าชอบตั้งคำถามและหาหลักฐานต่อไหม' : '3. บริหารธุรกิจ — เป็นทางให้ลอง หากสนใจการจัดการ งานขาย หรือการทำธุรกิจ',
+      'นี่เป็นตัวเลือกให้ทดลอง ไม่ใช่ข้อสรุปว่าคุณต้องเหมาะกับสายไหน เลือกดูงานจริงและเนื้อหาที่ต้องเรียนประกอบด้วย โดยเฉพาะสิ่งที่ทำได้ดีกับสิ่งที่อยากทำอาจเป็นคนละเรื่องกัน',
+    ].join('\n');
+  }
+  return null;
+}
+
 /** Answer intent comes before generic reflection; no routine follow-up question. */
 export function requestedAnswerReply(text, messages = [], options = {}) {
   const current = clean(text);
-  if (!current || BLOCK.test(current) || !QUESTION.test(current)) return null;
+  if (!current) return null;
+  const calculation = arithmeticReply(current);
+  if (calculation) return calculation;
+  if (!/อยากตาย|ไม่อยากมีชีวิต|ฆ่า|ทำร้าย|ยาเกินขนาด|ไม่ต้องตอบ|ไม่อยากคุย|system\s*prompt|ignore.{0,20}instructions/iu.test(current)) {
+    const practical = practicalRequest(current, messages);
+    if (practical) return practical;
+  }
+  if (BLOCK.test(current) || !QUESTION.test(current)) return null;
   const statements = ownStatements(options.userStatements ?? messages);
   const lastAssistant = Array.isArray(messages) ? [...messages].reverse().find(message => message?.role === 'assistant') : null;
   const previousAnswer = clean(lastAssistant?.content ?? lastAssistant?.text);

@@ -12,6 +12,60 @@ const noInterview = answer => {
   assert.doesNotMatch(answer, /[?？]|ข้อมูลไม่พอ|รายละเอียดไม่พอ|เล่าเพิ่ม|ถ้าใช้ MBTI/);
 };
 
+test('direct calculation wins over old emotional conversation', () => {
+  assert.equal(requestedAnswerReply('1+1 ได้เท่าไหร่', [own('เราเครียดเรื่องแฟนมาก')]), '1+1 = 2');
+  assert.equal(requestedAnswerReply('เราว่าชีวิตมันไม่ใช่ 1+1'), null);
+});
+
+test('explicit requests for study options produce options instead of deferral', () => {
+  const answer = requestedAnswerReply('แล้วควรเรียนอะไร ตอบมาเป็นตัวเลือกเลย', [own('เราเก่งคณิตแต่ไม่ได้ชอบ สนุกเวลาได้ท้าทายและเรียนรู้สิ่งที่ไม่รู้')]);
+  assert.match(answer, /1\..*คอมพิวเตอร์/);
+  assert.match(answer, /2\..*ข้อมูล/);
+  assert.match(answer, /3\..*วิทยาศาสตร์/);
+  assert.doesNotMatch(answer, /ยังไม่จำเป็น|เล่าเพิ่ม|ต้องเป็น|เหมาะที่สุด|[?？]/);
+  assert.equal(requestedAnswerReply('เราไม่อยากเรียนตามตัวเลือกที่แม่บอก'), null);
+  assert.equal(requestedAnswerReply('ตอนนี้เราไม่รุ้จะเรียนอะไร'), null);
+  assert.equal(requestedAnswerReply('เราไม่รู้ว่าควรเรียนอะไร'), null);
+  assert.match(requestedAnswerReply('เราไม่รู้จะเรียนอะไร ตอบมาเป็นตัวเลือกเลย'), /1\./);
+});
+
+test('draft requests deliver a sendable draft grounded in latest user facts', () => {
+  const history = [own('แฟนลืมมารับเรา'), { role: 'assistant', content: 'เขามาสายเป็นประจำและไม่รักคุณ' }, own('ไม่ได้โกรธที่เขาลืม แต่เสียใจที่เขาบอกว่าเรื่องแค่นี้เอง')];
+  const answer = requestedAnswerReply('ช่วยเขียนให้เราส่งหาเขาหน่อย', history);
+  assert.match(answer, /“.*ติดใจ.*เรื่องเล็ก.*”/);
+  assert.doesNotMatch(answer, /มาสาย|ไม่รัก|เป็นประจำ|เล่าเพิ่ม|เหตุการณ์นี้ไว้|[?？]/);
+  const shorter = requestedAnswerReply('ขอสั้นกว่านี้', [...history, { role: 'assistant', content: answer }]);
+  assert.match(shorter, /“.+”/);
+  assert.ok(shorter.length < answer.length);
+});
+
+test('drafting a corrected feeling uses the recipient viewpoint instead of echoing third person', () => {
+  const history = [own('แฟนบอกจะมารับแล้วก็ลืม'), own('ไม่ได้ติดที่เขาลืม เราติดที่เขาทำเหมือนความรู้สึกเราไร้สาระ')];
+  const answer = requestedAnswerReply('ช่วยเขียนให้เราส่งหาเขาหน่อย แบบไม่ทางการ', history);
+  assert.match(answer, /เธอทำเหมือนความรู้สึกเราไร้สาระ/);
+  assert.doesNotMatch(answer, /เขาทำ|เราเกลียด|ไม่รัก|เลิก/);
+  assert.match(answer, /เธอฟัง/);
+});
+
+test('partner waiting draft preserves the reported work explanation without endorsing a motive', () => {
+  const history = [own('แฟนอ่านไม่ตอบ แต่สตอรี่อัปอยู่ เราน้อยใจ'), own('ฝั่งเขาบอกว่างานยังไม่เสร็จ')];
+  const answer = requestedAnswerReply('ช่วยพิมพ์ข้อความไว้ส่งให้เขาหน่อย', history);
+  assert.match(answer, /^“/);
+  assert.match(answer, /เธอ.*งาน.*บอกเราสั้น/);
+  assert.match(answer, /น้อยใจ/);
+  assert.doesNotMatch(answer, /ไม่รัก|โกหก|ฝั่งเขาบอก|ตั้งใจเมิน/);
+  const shorter = requestedAnswerReply('ขอสั้นกว่านี้', [...history, { role: 'assistant', content: answer }]);
+  assert.match(shorter, /^“/);
+});
+
+test('direct draft contents override old conversation and missing context does not invent events', () => {
+  assert.equal(requestedAnswerReply('ช่วยเขียนข้อความบอกเขาว่า พรุ่งนี้เราไปไม่ได้', [own('แฟนลืมมารับ')]), 'ลองส่งว่า:\n“พรุ่งนี้เราไปไม่ได้”');
+  const empty = requestedAnswerReply('ช่วยร่างข้อความส่งหาเขาหน่อย');
+  assert.match(empty, /“.+”/);
+  assert.doesNotMatch(empty, /ลืม|มารับ|เสียใจ|เลิก|นอกใจ/);
+  assert.equal(requestedAnswerReply('อยากตาย ช่วยเขียนข้อความส่งหาเขาหน่อย'), null);
+});
+
 test('no evidence leaves the result open; sparse evidence reports only the supported axis', () => {
   const empty = buildReflectionReply(question);
   assert.match(empty, /ยังไม่เอน|เปิด/);

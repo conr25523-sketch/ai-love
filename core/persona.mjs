@@ -259,18 +259,22 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
   if (explanation) return explanation;
   const card = symbolicCardReply(current, recentMessages);
   if (card && !prefersListeningOnly(current, recentMessages)) return card;
-  const contextual = dialogueContextReply(raw, recentMessages, { listeningOnly: prefersListeningOnly(raw, recentMessages) });
-  if (contextual) return contextual;
+  // Concrete requests and explicit figurative discussion take precedence over
+  // broad topics. Context may enrich an answer, but must not replace the task.
   const requested = prefersListeningOnly(current, recentMessages) ? null : requestedAnswerReply(current, recentMessages, options);
   if (requested) return requested;
+  const realism = prefersListeningOnly(current, recentMessages) ? null : humanRealismReply(current, recentMessages);
+  if (realism) return realism;
+  const contextual = dialogueContextReply(raw, recentMessages, { listeningOnly: prefersListeningOnly(raw, recentMessages) });
+  if (contextual) return contextual;
+  const casual = casualReply(current, recentMessages);
+  if (casual) return casual;
   const lens = prefersListeningOnly(current, recentMessages) ? null : personalityPerspective(current, recentMessages);
   const withLens = content => lens ? `${content}\n${lens}` : content;
   const framework = prefersListeningOnly(current, recentMessages) ? null : personalityFrameworkReply(current, recentMessages);
   if (framework) return framework;
   const boundaries = socialBoundariesReply(current, recentMessages, { listeningOnly: prefersListeningOnly(current, recentMessages) });
   if (boundaries) return withLens(boundaries);
-  const casual = casualReply(current, recentMessages);
-  if (casual) return casual;
   if (prefersListeningOnly(current, recentMessages)) {
     return choose([
       'ได้เลย รอบนี้คุยสิ่งที่อยู่ในใจได้เต็มที่ เราจะไม่รีบเสนอวิธีแก้',
@@ -279,8 +283,6 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
       'รับความต้องการของคุณแล้ว จะคุยต่อโดยไม่แทรกบทเรียนหรือคำแนะนำ',
     ]);
   }
-  const realism = humanRealismReply(current, recentMessages);
-  if (realism) return realism;
   const detailed = detailedProblemReply(current, recentMessages);
   if (detailed) return withLens(detailed);
   const guidance = gentleGuidanceReply(current, recentMessages, options?.memory, { respondOnDisclosure: true });
@@ -370,18 +372,9 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
   if (patterns.anxiety.test(feelings)) {
     return reflect(choose(['ฟังดูเหมือนมีอะไรทำให้ไม่สบายใจหรือค้างใจอยู่ เรายังไม่อยากสรุปแทนคุณว่าความรู้สึกนั้นคืออะไรทั้งหมด', 'เรื่องนี้อาจวนอยู่ในใจคุณบ้าง เราจะยังไม่รีบตีความว่าเป็นเพราะใครหรือบอกให้หยุดคิดทันที']));
   }
+  // An unsupported subject is not evidence of distress or a life decision.
   return dialogueContextFallback(raw, recentMessages) || choose([
-    'ถ้าเรื่องที่เล่าเกี่ยวกับสิ่งที่ควรเลือก ความอยากของเรากับเงื่อนไขชีวิตอาจต้องดูคู่กัน\nทางเลือกที่ดูดีอาจมีต้นทุนด้านเวลา เงิน หรือความสัมพันธ์ที่ไม่เห็นตอนแรก\nลองใช้สิ่งที่สำคัญกับคุณและผลที่รับไหวเป็นหลัก โดยไม่ถือว่าคำตอบครั้งเดียวต้องกำหนดชีวิตทั้งหมด',
-    'ถ้ามีความคาดหวังเข้ามาเกี่ยวข้อง สิ่งที่หวังกับสิ่งที่เกิดขึ้นจริงอาจแยกดูได้\nความตั้งใจดีไม่ได้รับประกันผลลัพธ์ และการเข้าใจคนอื่นก็ไม่จำเป็นต้องรับภาระแทนเขาทั้งหมด\nใช้สิ่งที่เกิดขึ้นจริงดูว่าส่วนไหนปรับได้ ส่วนไหนต่อรองได้ และส่วนไหนอยู่นอกอำนาจเรา',
-    'ข้อความสั้น ๆ ยังไม่ใช่หลักฐานให้ตัดสินตัวคุณทั้งคน\nถ้าเรื่องนี้มีหลายทางเลือก ลองเทียบผลที่อยากได้กับต้นทุนที่แต่ละทางต้องจ่าย\nสิ่งที่เหมาะกับชีวิตจริงอาจไม่ใช่ทางที่ทำให้ทุกคนพอใจ แต่เป็นทางที่คุณเลือกและรับผิดชอบผลของมันได้',
-    'ถ้าเรื่องนี้เกี่ยวกับการคาดหวังคำตอบจากอีกคน ความเงียบกับการปฏิเสธยังไม่ใช่สิ่งเดียวกัน\nสิ่งที่เราคิดว่าเขาหมายถึงอาจต่างจากสิ่งที่เขาทำจริง จึงควรดูรูปแบบหลายครั้งมากกว่าเหตุการณ์เดียว\nคุณเลือกขอบเขตของการรอได้ โดยไม่ต้องตัดสินความคิดของเขาแทน',
-    'ถ้ากำลังเทียบตัวเองกับคนอื่น สิ่งที่เห็นอาจเป็นเพียงผลลัพธ์ ไม่ใช่ต้นทุนทั้งหมด\nโอกาส เวลา และแรงสนับสนุนที่ต่างกันมีผลจริง แต่ก็ไม่ได้ลบสิ่งที่เราฝึกต่อได้\nลองใช้การเปรียบเทียบเป็นข้อมูลว่าต้องเรียนรู้อะไร แทนการใช้ตัดสินคุณค่าทั้งชีวิต',
-    'ถ้าเรื่องนี้มีความรู้สึกค้างอยู่ การเข้าใจเหตุผลไม่ได้ทำให้ความรู้สึกหายทันที\nสิ่งที่เกิดขึ้นจริงกับความหมายที่เราให้มันอาจเกี่ยวกัน แต่ไม่จำเป็นต้องเป็นเรื่องเดียวกัน\nแยกสองส่วนนี้เพื่อเลือกว่าจะจัดการเหตุการณ์หรือดูแลผลที่มันมีต่อเรา โดยไม่ฝืนให้ทุกอย่างดูดี',
-    'ถ้าเจอคำแนะนำที่ฟังดี ลองดูด้วยว่ามันใช้ได้ภายใต้เงื่อนไขชีวิตของคุณไหม\nคำว่าอดทนหรือกล้าตัดสินใจอย่างเดียวอาจมองข้ามเงิน เวลา และสิ่งที่ต้องรับผิดชอบ\nทางที่มีประโยชน์ควรทำให้เห็นทั้งสิ่งที่จะได้และสิ่งที่ต้องแลก ไม่ใช่เพียงทำให้รู้สึกดีชั่วคราว',
-    'ถ้าความไม่แน่นอนเป็นส่วนของเรื่องนี้ เราอาจเลือกขอบเขตของการลองได้แม้ยังรู้ผลทั้งหมดไม่ได้\nการรอให้มั่นใจเต็มที่ก็มีต้นทุน ขณะที่การรีบเลือกโดยไม่ดูข้อจำกัดก็เสี่ยงอีกแบบ\nลองเริ่มจากทางที่ตรวจผลและปรับได้ แล้วใช้สิ่งที่เกิดขึ้นจริงช่วยตัดสินใจครั้งต่อไป',
-    'ถ้ากำลังพยายามทำให้ทุกคนพอใจ ความต้องการของแต่ละคนอาจไม่ได้ไปทางเดียวกัน\nบางครั้งการยอมทั้งหมดช่วยหลบความขัดแย้งวันนี้ แต่ทำให้ภาระกลับมาซ้ำในวันหน้า\nขอบเขตที่ชัดอาจไม่ถูกใจทุกคน แต่ช่วยให้เห็นว่าคุณรับผิดชอบส่วนไหนและส่วนไหนควรคุยร่วมกัน',
-    'ถ้าเรื่องนี้เกี่ยวกับความไว้ใจ คำพูดที่ดีเป็นข้อมูลหนึ่งส่วน แต่ยังต้องดูการกระทำด้วย\nคนเรามีทั้งความจริงใจและสิ่งที่อยากได้จากกัน จึงไม่ควรสรุปว่าดีหรือร้ายจากครั้งเดียว\nลองดูความสม่ำเสมอและความรับผิดชอบเมื่อไม่ได้ประโยชน์ แล้วค่อยให้ความไว้ใจตามสิ่งที่เห็นจริง',
-    'ถ้าคำว่าเหมาะสมในเรื่องนี้มาจากความเห็นของหลายคน คุณอาจแยกมาตรฐานเหล่านั้นออกจากสิ่งที่ให้ความสำคัญเองได้\nความเห็นคนอื่นช่วยเตือนข้อจำกัดได้ แต่ก็สะท้อนชีวิตและความกลัวของเขาด้วย\nลองใช้เหตุผลที่ตรวจสอบได้เทียบกับต้นทุนของคุณ ก่อนรับความเห็นนั้นเป็นคำตัดสินสุดท้าย',
-    'ถ้าผลลัพธ์ครั้งหนึ่งทำให้ลังเล การพลาดกับการเป็นคนล้มเหลวไม่จำเป็นต้องเป็นเรื่องเดียวกัน\nยังต้องรับผิดชอบผลเสียที่เกิดขึ้น แต่คำตัดสินทั้งตัวเราอาจไม่ได้ช่วยให้เห็นว่าจะแก้ตรงไหน\nมองสิ่งที่เกิดขึ้นเป็นข้อมูลของการเลือกและข้อจำกัด แล้วปรับส่วนที่เปลี่ยนได้โดยไม่ปฏิเสธความจริง',
+    'เรื่องนี้เราไม่รู้คำตอบที่แน่ชัด เลยไม่อยากเดาให้ผิดเรื่อง',
+    'เรื่องนี้เราอาจยังเข้าใจไม่ตรง เลยยังสรุปให้แบบมั่นใจไม่ได้',
   ]);
 }

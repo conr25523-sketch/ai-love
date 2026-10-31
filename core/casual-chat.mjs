@@ -8,6 +8,17 @@ const problemContext = /ปัญหา|ทุกข์|เดือดร้อ
 const bounded = value => typeof value === 'string' ? value.slice(0, 4000).normalize('NFC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim() : '';
 const FOOD = /อาหาร|กินข้าว|ก๋วยเตี๋ยว|พิซซ่า|ชาบู|ปิ้งย่าง|หมูกระทะ|ของกิน|หิว|กินอะไร|กินไร|อยากกิน|ชาไข่มุก|กาแฟ|ขนม|ไอศกรีม|ไอติม|เมนู/u;
 const WALLET_JOKE = /กระเป๋า(?:ตัง(?:ค์)?|เงิน).{0,6}ร้องไห้/u;
+const ACCIDENT = /(?:เดิน|วิ่ง|หัว|หน้า|หน้าผาก)?ชน(?:ประตู|กระจก)|สะดุด(?:ล้ม|ขา)|ลื่นล้ม/u;
+const FIGURATIVE_FOOD = /กินแกลบ|กลืนไม่เข้า|คายไม่ออก|เศษอาหาร|กระเพาะ|ลำไส้|ตับ.{0,5}ไต|รูปร่าง|รูปลักษณ์|ไขมัน.{0,15}นม|เปรียบ(?:เทียบ|เปรย)|อุปมา/u;
+
+// Mentioning food is not a request for a menu (e.g. anatomy or an idiom).
+function foodTopic(text) {
+  if (!FOOD.test(text) || FIGURATIVE_FOOD.test(text)) return false;
+  // A bare dish, hunger or an actual eating/ordering event establishes the topic.
+  // Generic mentions such as “อาหารเป็นตัวอย่าง” leave interpretation to the caller.
+  return /หิว|(?:อยาก|ไป|เพิ่ง|ได้|ชอบ|จะ|กำลัง|ไม่)กิน|กิน(?:ข้าว|อะไร|ไร)|เมนู.{0,20}(?:แนะนำ|อะไร|ไหนดี)|แนะนำ.{0,20}(?:อาหาร|เมนู)|(?:อาหาร|มื้อ|ก๋วยเตี๋ยว|พิซซ่า|ชาไข่มุก|ชาบู|ปิ้งย่าง|หมูกระทะ|กาแฟ|ขนม|ไอศกรีม|ไอติม).{0,10}(?:อร่อย|ถูกปาก|หวาน|รสชาติ)/u.test(text)
+    || /^(?:อาหาร|ก๋วยเตี๋ยว|พิซซ่า|ชาไข่มุก|ชาบู|ปิ้งย่าง|หมูกระทะ|กาแฟ|ขนม|ไอศกรีม|ไอติม)[\s.!]*$/u.test(text);
+}
 
 function messagesOf(messages, role) {
   if (!Array.isArray(messages)) return [];
@@ -27,7 +38,8 @@ function emojiPreference(text) {
 /** Returns null when this message belongs in the main reflective/safety route. */
 export function casualReply(text, recentMessages = []) {
   const current = bounded(text);
-  const foodContext = messagesOf(recentMessages, 'user').slice(-2).some(message => FOOD.test(message));
+  const userHistory = messagesOf(recentMessages, 'user');
+  const foodContext = userHistory.slice(-2).some(foodTopic);
   const walletJoke = WALLET_JOKE.test(current) && foodContext && !/หนี้|ไม่มีเงิน|เงินไม่พอ|จ่ายค่าเช่า|เดือดร้อน|ชักหน้าไม่ถึงหลัง/u.test(current);
   const guarded = walletJoke ? current.replace(WALLET_JOKE, '') : current;
   if (!current || blockers.test(guarded) || seriousContext.test(guarded) || problemContext.test(current) || corrections.test(current) || meaningRequest.test(current)) return null;
@@ -37,7 +49,31 @@ export function casualReply(text, recentMessages = []) {
   let emoji = '🙂';
 
   const assistantSubject = /นาย|เธอ|คุณ|ม่านใจ|จันทร์|บอต|บอท|\bai\b|เอไอ/iu.test(current.replace(/ขอบคุณ/gu, ''));
-  if ((assistantSubject && /กิน|หิว|นอน|ใช้ชีวิต|ชีวิต|มีความรู้สึก|ชอบกิน|เพลงโปรด|ชอบเพลง|เล่นเกม|ชอบเกม|ทำอะไรอยู่|เป็นคน|เป็นมนุษย์/u.test(current))
+  const accidentContext = userHistory.slice(-3).some(message => ACCIDENT.test(message));
+  const quietContext = userHistory.slice(-3).some(message => /เหนื่อย|ไม่รู้จะพูดอะไร|ไม่รู้จะเล่าอะไร|อยู่เป็นเพื่อน|ขอฟังเฉย|ไม่ต้องแนะนำ/u.test(message));
+  if ((accidentContext || ACCIDENT.test(current)) && /เจ็บ|ปวด/u.test(current) && !/ไม่(?:ได้)?เจ็บ|ไม่(?:ได้)?ปวด|หาย(?:เจ็บ|ปวด)/u.test(current)) {
+    alternatives = /หน้าผาก/u.test(current)
+      ? ['อ้าว ยังเจ็บหน้าผากอยู่จริง ๆ งั้นเราไม่แซวต่อแล้ว เรื่องอายเอาไว้ก่อนนะ', 'เมื่อกี้เรารับเป็นมุกไป แต่ตอนนี้คุณบอกว่ายังเจ็บหน้าผากอยู่ เรารับเรื่องเจ็บด้วยนะ ไม่เล่นทับแล้ว']
+      : ['อ้าว ยังเจ็บอยู่ด้วย งั้นเราไม่แซวต่อแล้วนะ', 'เมื่อกี้มีเรื่องขำปนอยู่ แต่คุณยังเจ็บจริง ๆ เราไม่เล่นทับเรื่องนี้แล้ว'];
+    emoji = null;
+  } else if (/^(?:(?:นาย|เธอ|คุณ|ม่านใจ|ช่วย|อยากให้).{0,12})?(?:(?:อยู่|นั่ง|คุย)เป็นเพื่อน(?:เรา)?(?:เฉย\s*ๆ)?(?:ได้|หน่อย)|เป็นเพื่อน(?:เรา)?หน่อย)|^เงียบเป็นเพื่อน/u.test(current)) {
+    alternatives = ['ได้เลย เราอยู่คุยเป็นเพื่อนตรงนี้ ไม่ต้องหาเรื่องมาเล่าก็ได้', 'ได้ วันนี้ไม่ต้องหาคำตอบหรือคุยให้เป็นเรื่องเป็นราวก็ได้ เราอยู่ตรงนี้'];
+    emoji = null;
+  } else if (/^(?:ไม่รู้|ไม่รุ้)(?:จะ)?(?:พูด|เล่า)(?:อะไร|ไร)(?:แล้ว|เลย|ดี|อะ|อ่ะ|นะ|[.\s])*$/u.test(current)) {
+    alternatives = ['ไม่ต้องฝืนหาคำพูดก็ได้นะ ตอนนี้คุยกันแบบเงียบ ๆ บ้างก็ได้', 'ได้ ไม่ต้องเรียบเรียงอะไรให้เราฟังตอนนี้ก็ได้'];
+    emoji = null;
+  } else if (quietContext && /^(?:อืม|อือ|อื้ม|อื้อ|อ่า|อ่าา|อืมม+)(?:นะ|[.\s])*$/u.test(current)) {
+    alternatives = ['อืม ไม่ต้องฝืนคุยนะ', 'เราอยู่ตรงนี้นะ'];
+    emoji = null;
+  } else if ((accidentContext || ACCIDENT.test(current)) && /(?:ประตู|กระจก).{0,12}(?:ไม่แตก|แตก)|กินแกลบ/u.test(current)) {
+    alternatives = ['ดีที่ประตูรอด ไม่งั้นความอายมีใบเสร็จตามมาด้วย 555', 'เกือบมีทั้งคนมองทั้งค่าประตูเลย 555'];
+    emoji = null;
+  } else if (ACCIDENT.test(current) && /อาย|ขายหน้า|555|ฮ่า/u.test(current)) {
+    alternatives = /ชน(?:ประตู|กระจก)/u.test(current)
+      ? ['โอ๊ย ชนประตูแล้วต้องทำเป็นเดินต่อเนียน ๆ นี่เนียนยากมาก 555', 'จังหวะอยากเดินต่อให้เนียน แต่ประตูกระจกไม่ให้ความร่วมมือเลย 555']
+      : ['จังหวะอายแบบอยากมีปุ่มย้อนกลับสักสิบวินาทีเลย 555', 'พยายามทำเป็นไม่มีอะไรเกิดขึ้น แต่ความอายยังไม่ยอมเดินตามมา 555'];
+    emoji = null;
+  } else if ((assistantSubject && /กิน|หิว|นอน|ใช้ชีวิต|ชีวิต|มีความรู้สึก|ชอบกิน|เพลงโปรด|ชอบเพลง|เล่นเกม|ชอบเกม|ทำอะไรอยู่|เป็นคน|เป็นมนุษย์/u.test(current))
       || /^(?:กินข้าวยัง|กินข้าวหรือยัง|กินอะไรมา|กินไรมา|นอนยัง|นอนหรือยัง)[\s!?]*$/u.test(current)) {
     alternatives = [
       'เราเป็นระบบตอบข้อความ เลยไม่ได้กิน นอน หรือเล่นเกมเองแบบคน ไม่มีชีวิตประจำวันของตัวเองนะ',
@@ -77,7 +113,7 @@ export function casualReply(text, recentMessages = []) {
   } else if (/เล่ามุก|เล่นมุก|ขอมุก|มุกตลก|เรื่องตลก|ขำหน่อย/u.test(current)) {
     alternatives = ['มุกเบา ๆ: แผนวันนี้คือทำงานให้ไว แต่ไวที่สุดคือ Wi-Fi', 'มุกเบา ๆ: มือถือเข้าโหมดประหยัดพลังงาน ส่วนเดดไลน์เข้าโหมดเพิ่มงาน'];
     emoji = '😄';
-  } else if (FOOD.test(current)) {
+  } else if (foodTopic(current)) {
     emoji = '🍜';
     if (/แพ้.{0,12}(?:อาหาร|ไข่|นม|ถั่ว|กุ้ง|ปลา|กลูเตน)/u.test(current)) return null;
     if (/หิว|กิน(?:อะไร|ไร)ดี|เมนู.*(?:แนะนำ|อะไร|ไหนดี)|แนะนำ.*(?:อาหาร|เมนู)/u.test(current)) {

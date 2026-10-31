@@ -2,6 +2,49 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { casualReply } from './casual-chat.mjs';
 
+test('an embarrassing accident can be light without turning pain into a joke', () => {
+  const history = [];
+  const say = text => {
+    const reply = casualReply(text, history);
+    history.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
+    return reply;
+  };
+  const first = say('วันนี้เดินชนประตูกระจกต่อหน้าคนทั้งร้าน อายชิบ555');
+  assert.match(first, /ชน|ประตู|กระจก|หน้าผาก/);
+  assert.doesNotMatch(first, /เป้าหมาย|บทเรียน|รายละเอียดไม่พอ|ตีความได้หลายแบบ|[?？]/);
+  const idiom = say('ดีนะประตูไม่แตกไม่งั้นได้กินแกลบแน่');
+  assert.match(idiom, /ประตู|ค่า|ใบเสร็จ/);
+  assert.doesNotMatch(idiom, /เมนู|ก๋วยเตี๋ยว|หิว|เลือกกิน/);
+  const pain = say('ล้อเล่นจริงๆเจ็บหน้าผากอยู่');
+  assert.match(pain, /เจ็บหน้าผาก/);
+  assert.doesNotMatch(pain, /555|ฮ่า|😂|🤣|ยา|ประคบ|ไม่เป็นไร|ไม่อันตราย/);
+});
+
+test('quiet companionship takes precedence over generic relationship advice', () => {
+  const history = [{ role: 'user', content: 'วันนี้เหนื่อยอะ' }];
+  for (const text of ['อืม', 'ไม่รู้จะพูดอะไร', 'อยู่เป็นเพื่อนเฉยๆได้ปะ']) {
+    const reply = casualReply(text, history);
+    assert.equal(typeof reply, 'string', text);
+    assert.doesNotMatch(reply, /ทางเลือก|เป้าหมาย|ความสัมพันธ์|ลอง|[?？]/, text);
+    history.push({ role: 'user', content: text }, { role: 'assistant', content: reply });
+  }
+  assert.equal(casualReply('อยู่เป็นเพื่อนหน่อย เราอยากตาย'), null);
+  assert.equal(casualReply('เออแค่อยากอยู่เงียบๆบ้าง'), null);
+  assert.equal(casualReply('อยู่เงียบๆบ้างไม่ได้แปลว่าไม่รักเพื่อน'), null);
+  assert.equal(casualReply('เขาบอกเป็นเพื่อนกันได้'), null);
+});
+
+test('anatomy, food as an example and figurative poverty are not menu intents', () => {
+  for (const text of [
+    'คนหลงรูปร่างภายนอก ทั้งที่ภายในมีตับ ไต ไส้ เศษอาหาร และไขมันที่เป็นนม',
+    'อาหารเป็นตัวอย่างของความเหลื่อมล้ำ คนมีเงินก็มีสิทธิ์เลือกมากกว่า',
+    'เงินหมดแล้วคงต้องกินแกลบ',
+    'เปรียบเทียบชีวิตเป็นกาแฟที่ขม',
+  ]) assert.equal(casualReply(text), null, text);
+  assert.match(casualReply('วันนี้ไปกินปิ้งย่างมา อร่อยจัด'), /มื้อ|อร่อย/);
+  assert.match(casualReply('หิวอะ แนะนำเมนูหน่อย'), /ข้าว|ก๋วยเตี๋ยว/);
+});
+
 const hasEmoji = text => /[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(text);
 
 test('follows a food topic switch instead of returning to previous psychology', () => {

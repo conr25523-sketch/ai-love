@@ -138,8 +138,91 @@ test('negatives, role isolation and persisted current message are handled withou
   assert.equal(dialogueContextReply('ทำยังไงดี', prior), null);
   const current = 'แฟนอ่านไม่ตอบ เราน้อยใจ';
   assert.deepEqual(buildDialogueContext(current, [{ role: 'user', content: current }]).activeTurns, [current]);
-  assert.match(dialogueContextFallback('เครื่องกรองน้ำมีเสียงดัง'), /เครื่องกรองน้ำมีเสียงดัง/u);
-  assert.doesNotMatch(dialogueContextFallback('เครื่องกรองน้ำมีเสียงดัง'), /ความพยายามเพิ่มโอกาส|ความไว้ใจ|ภาระเพื่อน/u);
+  assert.equal(dialogueContextFallback('เครื่องกรองน้ำมีเสียงดัง'), null);
+});
+
+test('social pressure is not a message-carrying role and explicit mediation still is', () => {
+  const pressure = 'ทำไมเพื่อนชอบบอกให้เราไปคุยกับคนนั้นคนนี้ทั้งที่ไม่สนิท';
+  assert.equal(buildDialogueContext(pressure).issue, 'social-pressure');
+  const reply = dialogueContextReply(pressure);
+  assert.match(reply, /ยังไม่สนิท|เข้าไปคุย/u);
+  assert.doesNotMatch(reply, /ส่งสาร|พูดแทน|คนกลาง|คุยกันเอง/u);
+  assert.equal(buildDialogueContext('เพื่อนฝากเราไปบอกอีกคนว่าอย่ามาสาย').issue, 'mediator');
+  assert.equal(buildDialogueContext('เพื่อนให้เราไปคุยกับเพื่อนใหม่').issue, null);
+});
+
+test('denied social fear and a quiet-space continuation keep the actual preference', () => {
+  const first = 'เราไม่ได้กลัวเข้าสังคมนะ แค่ไม่อยากคุยกับทุกคน';
+  assert.equal(buildDialogueContext(first).issue, 'social-boundary');
+  assert.match(dialogueContextReply(first), /ไม่ได้กลัว|เลือกได้/u);
+  const next = dialogueContextReply('เออแค่อยากอยู่เงียบๆบ้าง', [{ role: 'user', content: first }]);
+  assert.match(next, /อยู่เงียบ|พื้นที่/u);
+  assert.doesNotMatch(next, /กลัวเข้าสังคม|ส่งสาร|ฝึกพูด|ลองเข้าสังคม/u);
+  assert.doesNotMatch(dialogueContextReply('เราไม่อยากคุยกับทุกคน'), /ไม่ได้กลัว/u);
+});
+
+test('a corrected relationship concern focuses on dismissed feelings rather than forgetting', () => {
+  const history = [{ role: 'user', content: 'แฟนลืมมารับเรา พอบอกว่าเสียใจก็บอกว่าเรื่องแค่นี้เอง' }];
+  const corrected = 'ไม่ได้ติดที่เขาลืม แต่ติดที่เขาทำเหมือนความรู้สึกเราไม่สำคัญ';
+  assert.equal(buildDialogueContext(corrected, history).issue, 'feeling-dismissed');
+  const reply = dialogueContextReply(corrected, history);
+  assert.match(reply, /ไม่ใช่การลืม|ความรู้สึก/u);
+  assert.doesNotMatch(reply, /ยุ่ง|ความเหงา|ลืมได้เป็นธรรมดา|ไม่ตอบข้อความ/u);
+  const draft = dialogueContextReply('ช่วยพิมพ์ข้อความส่งให้เขาหน่อย', [...history, { role: 'user', content: corrected }]);
+  assert.match(draft, /^“/u);
+  assert.match(draft, /ความรู้สึก|รับฟัง|ฟังกัน/u);
+});
+
+test('companionship is an explicit request independent of an old relationship issue', () => {
+  const reply = dialogueContextReply('อยู่เป็นเพื่อนเฉยๆได้ปะ', [{ role: 'user', content: 'แฟนไม่ตอบ' }]);
+  assert.match(reply, /ได้เลย|เราอยู่ตรงนี้/u);
+  assert.doesNotMatch(reply, /ความสัมพันธ์|ต้องการ|แฟน|ข้อความค้าง/u);
+});
+
+test('generic comparisons do not invent job offers, celebration, or friends', () => {
+  for (const text of ['รู้สึกเราช้ากว่าคนอื่น', 'อิจฉาคนที่เก่งกว่า', 'เราอิจฉาพี่ที่ทำอะไรก็เก่ง']) {
+    const reply = dialogueContextReply(text);
+    assert.equal(typeof reply, 'string');
+    assert.doesNotMatch(reply, /ได้งาน|ข่าวดี|ดีใจกับเพื่อน/u);
+  }
+});
+
+test('unsupported statements and corrections defer without canned echo or analysis announcements', () => {
+  for (const text of ['เราเดินชนกระจก อายชิบ555', 'ไม่ใช่ เราหมายถึงอีกอย่าง', 'เครื่องกรองน้ำมีเสียงดัง', 'เอ่อ']) {
+    assert.equal(dialogueContextFallback(text), null);
+  }
+  assert.equal(dialogueContextReply('คนหลงรูปร่างที่สวยงาม แต่ภายในมีเศษอาหารกับก้อนไขมัน'), null);
+});
+
+test('work obligations follow the burden and listening request without inventing a sole provider', () => {
+  const first = 'อยากลาออก แต่ต้องส่งเงินให้แม่ทุกเดือน แถมยังมีหนี้อีก';
+  const second = 'ไม่ได้อยากได้แผนการเงิน เราแค่เหนื่อยที่ต้องรับผิดชอบตลอด';
+  const third = 'เห็นคนอื่นใช้ชีวิตแล้วอิจฉา ไม่อยากเป็นคนดีสักวันได้ไหม';
+  const history = [{ role: 'user', content: first }];
+  assert.equal(buildDialogueContext(first).issue, 'work-obligations');
+  assert.match(dialogueContextReply(first), /ส่งเงินให้แม่|หนี้/u);
+  const context = buildDialogueContext(second, history);
+  assert.equal(context.issue, 'work-obligations');
+  assert.equal(context.listeningOnly, true);
+  const correction = dialogueContextReply(second, history);
+  assert.match(correction, /ไม่ได้ขอให้จัดการตัวเลข|เหนื่อย|รับผิดชอบ/u);
+  assert.doesNotMatch(correction, /ทำบัญชี|วางแผนการเงิน|กองทุน|แบ่งเงิน|หางานใหม่/u);
+  history.push({ role: 'user', content: second });
+  const envy = dialogueContextReply(third, history);
+  assert.equal(buildDialogueContext(third, history).issue, 'work-obligations');
+  assert.match(envy, /พื้นที่ของตัวเอง|เลือกตัวเอง|อยากพัก/u);
+  assert.match(envy, /ส่งเงินให้แม่|หนี้/u);
+  for (const reply of [correction, envy]) assert.doesNotMatch(reply, /คนเดียวที่หาเงิน|โยนงาน|ทิ้งแม่|หนีหนี้|เพื่อนได้งาน/u);
+});
+
+test('burden context requires work and a concrete obligation, and ends at an unrelated topic', () => {
+  for (const text of ['เราเหนื่อยกับงาน', 'แม่ให้เงินเราไปทำงาน เราไม่มีหนี้', 'เรามีหนี้', 'วันนี้ส่งงานให้แม่']) {
+    assert.notEqual(buildDialogueContext(text).issue, 'work-obligations');
+  }
+  const history = [{ role: 'user', content: 'อยากลาออก แต่ยังมีหนี้ต้องจ่าย' }];
+  assert.equal(buildDialogueContext('วันนี้กินพิซซ่ามา อร่อยมาก', history).issue, null);
+  assert.equal(buildDialogueContext('เปลี่ยนเรื่อง เราอิจฉาพี่ที่วาดรูปสวย', history).issue, 'drawing');
+  assert.doesNotMatch(dialogueContextReply('ไม่อยากได้แผน แค่เหนื่อย', history), /ส่งเงินให้แม่/u);
 });
 
 test('safety and tarot flows keep precedence over contextual replies', () => {

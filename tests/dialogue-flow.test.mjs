@@ -52,6 +52,28 @@ function conversation() {
   };
 }
 
+test('persisted delivery answers math and appearance imagery without unrelated counselling or food', async t => {
+  const chat = conversation(); t.after(() => chat.close()); await chat.start();
+  await chat.say('วันนี้เหนื่อยอะ');
+  const maths = await chat.say('1+1ได้เท่าไหร่');
+  assert.equal(maths, '1+1 = 2');
+  const metaphor = await chat.say('คนเราหลงรูปลักษณ์ภายนอก แต่ในร่างกายก็มีตับไตไส้พุง เศษอาหารกับไขมัน');
+  assert.match(metaphor, /รูปลักษณ์|ร่างกาย|ภายนอก/);
+  assert.doesNotMatch(metaphor, /เมนู|เลือกกิน|หิว|มื้อ|ข้าวผัด|สงบจิตใจ/);
+});
+
+test('persisted delivery drafts from the corrected issue rather than an earlier assistant assumption', async t => {
+  const chat = conversation(); t.after(() => chat.close()); await chat.start();
+  await chat.say('แฟนลืมมารับเรา พอเราบอกว่าเสียใจเขากลับบอกว่าเรื่องแค่นี้เอง');
+  await chat.say('ไม่ได้ติดที่เขาลืม เราติดที่เขาทำเหมือนความรู้สึกเราไร้สาระ');
+  const draft = await chat.say('ช่วยเขียนให้เราส่งหาเขาหน่อย แบบไม่ทางการ');
+  assert.match(draft, /เธอ|แก|คุณ/);
+  assert.match(draft, /ความรู้สึก|เสียใจ|ไร้สาระ/);
+  assert.doesNotMatch(draft, /ที่เขา|เราจะยึด|ข้อมูลไม่พอ|เขาไม่รัก|นอกใจ/);
+  const short = await chat.say('ขอสั้นกว่านี้');
+  assert.ok(short.length < draft.length);
+});
+
 test('food jokes, laughter and goodbye preserve casual context through saved history', async t => {
   const chat = conversation(); t.after(() => chat.close()); await chat.start();
   assert.match(await chat.say('วันนี้ไปกินปิ้งย่างมา อร่อยจัด'), /ปิ้งย่าง|อร่อย|มื้อ|กิน/);
