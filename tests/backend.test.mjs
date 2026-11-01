@@ -481,6 +481,38 @@ test('saved selected tarot card survives the short dialogue window and profile s
   assert.doesNotMatch(other.messages.find(message => message.role === 'assistant').content, /คุณได้ไพ่ “/);
 });
 
+test('saved Chariot and a three-year breakup stay on topic with validation before one followup', async t => {
+  const h = harness(); t.after(() => h.sqlite.close());
+  h.setReply(input => generateProviderReply(input, {}));
+  await h.register('มิ้นท์');
+  let round, cards;
+  for (let i = 0; i < 1000; i++) {
+    round = `chariot-review-${i}`; cards = drawTarotCards(round);
+    if (cards.some(card => card.id === 7)) break;
+  }
+  assert.ok(cards.some(card => card.id === 7));
+  seedMessage(h, { id: round, role: 'assistant', content: 'เลือกไพ่หนึ่งใบจากสามใบด้านล่าง', createdAt: 2000000000001 });
+  h.tick(10);
+  assert.equal((await h.send('breakup_card_choice', `เราเลือกไพ่ใบที่ ${cards.findIndex(card => card.id === 7) + 1}`)).status, 200);
+  const send = async (key, text) => {
+    h.tick(10); const response = await h.send(key, text); assert.equal(response.status, 200);
+    return (await response.json()).messages.find(message => message.role === 'assistant').content;
+  };
+  const reply = await send('breakup_topic_001', 'เราเลิกกับแฟนที่คบมา3ปี เสียใจและโกรธมาก ควรทำยังไง?');
+  assert.match(reply, /3 ปี|3ปี/);
+  assert.match(reply, /เสียใจ/); assert.match(reply, /โกรธ/);
+  assert.match(reply, /รถศึก/);
+  assert.doesNotMatch(reply, /บริษัท|คำพิพากษา|สิ่งที่ต้องฝึก|เขาจะกลับมาหาคุณ/);
+  assert.equal((reply.match(/[?？]/gu) || []).length, 1);
+  assert.ok(reply.indexOf('เสียใจ') < reply.lastIndexOf('?'));
+  assert.ok(reply.trim().endsWith('?'), 'The follow-up remains last, after the symbolic lens');
+  const next = await send('breakup_topic_002', 'เรายังคิดถึงเขาอยู่');
+  assert.doesNotMatch(next, /บริษัท|คำพิพากษา|สิ่งที่ต้องฝึก|ถ้ามองผ่านภาพไพ่/);
+  assert.doesNotMatch(next, /การจบความสัมพันธ์ที่คบมา|คุณบอกว่ายังเสียใจ/);
+  assert.doesNotMatch(next, /[?？]/);
+  assert.equal(await send('breakup_topic_003', '1+1='), '1+1 = 2');
+});
+
 test('learning source is bounded to latest 200 user rows in chronological order', async () => {
   const h = harness(); await h.register();
   for (let i = 0; i < 210; i++) {

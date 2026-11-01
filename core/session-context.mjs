@@ -77,11 +77,21 @@ export function sessionRecallReply(text, context) {
 
 const LENS_TOPICS = new Map([
   [3, /ดูแล|พัก|เหนื่อย|หมดแรง|แบก/u], [4, /หน้าที่|งาน|ขอบเขต|รับผิดชอบ/u],
-  [7, /เป้าหมาย|เลือกทาง|หลายอย่าง|อนาคต/u], [8, /โกรธ|อารมณ์|กลัว/u],
+  [7, /เป้าหมาย|เลือกทาง|หลายอย่าง|อนาคต|เลิกกับ|เลิกกัน|อกหัก|แฟนเก่า|คิดถึงแฟน|ยังรัก|อยากกลับไป|ความสัมพันธ์/u], [8, /โกรธ|อารมณ์|กลัว/u],
   [9, /เงียบ|พัก|เหนื่อย|ตัวเอง|ตัดสินใจ/u], [11, /ตัดสินใจ|เหตุผล|เป็นธรรม/u],
   [12, /มุมมอง|ทางตัน|ติดอยู่/u], [14, /เหนื่อย|พัก|สมดุล/u],
   [17, /หวัง|กำลังใจ|ท้อ/u], [18, /กังวล|ไม่ชัด|คิดมาก/u],
 ]);
+
+function listeningPreference(text, messages) {
+  let listening = false;
+  for (const content of [...messages.filter(message => message?.role === 'user').map(value), text]) {
+    for (const match of content.matchAll(/ไม่ต้องแนะนำ|ไม่เอาคำแนะนำ|ฟัง(?:เฉย\s*ๆ|อย่างเดียว)|ขอ(?:แค่)?ระบาย|แค่ฟัง|ช่วยแนะนำ|ช่วยคิดทางออก|อยากได้คำแนะนำ|ลองเสนอทางเลือก/gu)) {
+      listening = !/ช่วยแนะนำ|ช่วยคิดทางออก|อยากได้คำแนะนำ|ลองเสนอทางเลือก/u.test(match[0]);
+    }
+  }
+  return listening;
+}
 
 /** Optional symbolic lens, at most once until another reading. Never a fact/prediction. */
 export function tarotLensReply(text, context, messages = []) {
@@ -89,7 +99,18 @@ export function tarotLensReply(text, context, messages = []) {
   if (!card || typeof text !== 'string' || !LENS_TOPICS.get(card.id)?.test(text)
       || !/[ก-๙]/u.test(text) || /ไพ่|ไม่เอา|ไม่ต้อง|แค่ฟัง|ฆ่า|ทำร้าย|ตาย|เจ็บ|อันตราย|ฉุกเฉิน/u.test(text)) return null;
   const recent = Array.isArray(messages) ? messages : [];
+  if (listeningPreference(text, recent)) return null;
   const lastReading = recent.findLastIndex(message => message?.role === 'assistant' && /^(?:คำทำนายจากไพ่|คุณได้ไพ่) “/u.test(value(message)));
+  // A label or caller-supplied card alone is not a persisted selection.
+  if (lastReading < 0 || buildSessionContext({ recentMessages: recent }).selectedCard?.id !== card.id) return null;
   if (recent.slice(lastReading + 1).some(message => message?.role === 'assistant' && value(message).includes(`ถ้ามองผ่านภาพไพ่ “${card.title}”`))) return null;
+  if (card.id === 7) {
+    const frame = `ถ้ามองผ่านภาพไพ่ “${card.title}” ที่คุณเลือกไว้ รถศึกมีแรงดึงไปคนละทาง เป็นอีกมุมให้ลองเทียบกับเรื่องนี้`;
+    if (/เลิกกับ|เลิกกัน|อกหัก|แฟนเก่า/u.test(text)) {
+      return `${frame}: หลังความสัมพันธ์จบ ใจอาจทั้งคิดถึงและอยากไปต่อพร้อมกันได้ การถือบังเหียนจึงอาจหมายถึงเลือกก้าวที่ดูแลตัวเองได้ แม้ยังคิดถึงอยู่ ภาพนี้ไม่ได้บอกว่าเขาจะกลับมาหรือว่าคุณต้องรีบลืมเขา`;
+    }
+    if (/คิดถึงแฟน|ยังรัก|อยากกลับไป|ความสัมพันธ์/u.test(text)) return `${frame}: ความต้องการของสองคนอาจต่างกันได้ เราเลือกได้ว่าจะสื่อสารและวางขอบเขตอย่างไร แต่บังคับให้อีกคนรู้สึกเหมือนเราไม่ได้ ภาพนี้ชวนมองส่วนที่เราตัดสินใจเองได้ ไม่ได้บอกว่าอีกคนกำลังคิดอะไร`;
+    return `${frame}: การมีหลายอย่างดึงเราอยู่ไม่ได้แปลว่าต้องชนะทุกเรื่องพร้อมกัน ลองเลือกว่าก้าวต่อไปจะให้อะไรนำทาง โดยยังยอมปรับทางเมื่อเห็นข้อจำกัดจริง`;
+  }
   return `ถ้ามองผ่านภาพไพ่ “${card.title}” ที่คุณเลือกไว้ ธีม${card.meaning}ก็เป็นอีกมุมให้ลองเทียบกับเรื่องนี้ได้`;
 }

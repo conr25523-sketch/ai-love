@@ -16,6 +16,7 @@ import { symbolicCardReply } from './symbolic-cards.mjs';
 import { analyzeTurnIntent } from './turn-intent.mjs';
 import { reflectiveDiscussionReply } from './reflective-discussion.mjs';
 import { conversationSupportReply, conversationFallbackReply } from './conversation-support.mjs';
+import { relationshipSupportReply } from './relationship-support.mjs';
 import { arithmeticReply } from './arithmetic.mjs';
 export const SYSTEM_PROMPT = `คุณคือ “ม่านใจ” ผู้ช่วยสนทนาเพื่อสำรวจความคิดและความรู้สึก พูดภาษาไทยแบบคุยกัน เป็นกันเอง และตรงไปตรงมา
 
@@ -284,6 +285,8 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
   // broad topics. Context may enrich an answer, but must not replace the task.
   const requested = prefersListeningOnly(current, recentMessages) ? null : requestedAnswerReply(current, recentMessages, options);
   if (requested) return requested;
+  const relationship = relationshipSupportReply(raw, recentMessages, options);
+  if (relationship) return relationship;
   const realism = prefersListeningOnly(current, recentMessages) ? null : humanRealismReply(current, recentMessages);
   if (realism) return realism;
   // A stated viewpoint is a conversational contribution, not an unanswered fact.

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { buildSessionContext, sessionRecallReply, tarotLensReply } from './session-context.mjs';
 import { TAROT_DECK } from './tarot-deck.mjs';
 import { generateProviderReply } from '../lib/ai-provider.mjs';
+import { symbolicCardReply, CARD_INVITATION } from './symbolic-cards.mjs';
+import { drawTarotCards } from './tarot-deck.mjs';
 
 const user = content => ({ role: 'user', content });
 const assistant = content => ({ role: 'assistant', content });
@@ -73,4 +75,49 @@ test('tarot is an optional relevant symbolic lens, never forced into every reply
   assert.equal(tarotLensReply('เราไม่เอาไพ่แล้ว เหนื่อย', context, messages), null);
   assert.equal(tarotLensReply('เหนื่อยจนอยากตาย', context, messages), null);
   assert.equal(tarotLensReply('เราเหนื่อย', context, [...messages, assistant(lens)]), null);
+});
+
+function chariotReadingHistory() {
+  for (let round = 0; round < 100; round++) {
+    const invitation = { id: `chariot-test-${round}`, role: 'assistant', content: CARD_INVITATION };
+    const index = drawTarotCards(invitation.id).findIndex(card => card.id === 7);
+    if (index >= 0) {
+      const choice = `เราเลือกไพ่ใบที่ ${index + 1}`;
+      return [invitation, user(choice), assistant(symbolicCardReply(choice, [invitation]))];
+    }
+  }
+  assert.fail('expected a deterministic spread with The Chariot');
+}
+
+test('actual generated Chariot reading connects breakup to mixed feelings and own next step', async () => {
+  const history = chariotReadingHistory();
+  const text = 'เราเพิ่งเลิกกับแฟนที่คบกันมา 3 ปี ตอนนี้เสียใจมาก';
+  const context = buildSessionContext({ recentMessages: history });
+  assert.equal(context.selectedCard?.id, 7);
+  const lens = tarotLensReply(text, context, history);
+  assert.match(lens, /รถศึก/);
+  assert.match(lens, /คิดถึงและอยากไปต่อ/);
+  assert.match(lens, /ก้าวที่ดูแลตัวเอง/);
+  assert.doesNotMatch(lens, /เขาจะกลับมาแน่นอน|บริษัท|คำพิพากษา/);
+  assert.equal(tarotLensReply(text, context, [...history, assistant(lens)]), null);
+  const reply = await generateProviderReply({ text, recentMessages: history }, {});
+  assert.match(reply.content, /รถศึก/);
+});
+
+test('Chariot lens respects listening preference until user requests guidance again', () => {
+  const history = chariotReadingHistory();
+  const context = buildSessionContext({ recentMessages: history });
+  const listening = [...history, user('ขอระบายก่อน ฟังเฉยๆก็พอ')];
+  assert.equal(tarotLensReply('เราเลิกกับแฟนแล้วเสียใจมาก', context, listening), null);
+  assert.match(tarotLensReply('เราเลิกกับแฟนแล้ว ช่วยคิดทางออกหน่อย', context, listening), /รถศึก/);
+  assert.equal(tarotLensReply('1+1ได้เท่าไหร่', context, history), null);
+  assert.equal(tarotLensReply('เลิกกับแฟนจนอยากตาย', context, history), null);
+  assert.equal(tarotLensReply('เราเลิกกับแฟนแล้ว', { selectedCard: TAROT_DECK[7] }, [user('ไพ่ที่เลือกไว้: รถศึก')]), null);
+});
+
+test('relationship lens does not assume a breakup from a general relationship problem', () => {
+  const history = chariotReadingHistory();
+  const lens = tarotLensReply('ความสัมพันธ์ตอนนี้มีเรื่องให้คุยกันเยอะ', buildSessionContext({ recentMessages: history }), history);
+  assert.match(lens, /ความต้องการของสองคน/);
+  assert.doesNotMatch(lens, /หลังความสัมพันธ์จบ|ต้องรีบลืม/);
 });

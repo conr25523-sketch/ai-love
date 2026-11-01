@@ -41,6 +41,9 @@ export function prefersListeningOnly(text, messages = []) {
 
 function categoryOf(text) {
   const analysis = analyzeThaiText(text);
+  // Breakup disclosures have their own validating response. Sadness/guilt here
+  // must not become performance failure or generic self-improvement coaching.
+  if (/เลิกกับแฟน|เลิกกัน|บอกเลิก|อกหัก|หย่ากัน|หย่ากับ/u.test(analysis.normalized)) return null;
   const terms = new Set(analysis.hints.map(hint => hint.term));
   const lexical = analysis.normalized
     .replace(/เฟล/gu, value => terms.has('เฟล') ? value : '[คำอื่น]')
