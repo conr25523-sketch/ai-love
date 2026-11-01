@@ -54,6 +54,11 @@ export function buildConversationMemory(messages = []) {
   const facts = new Map();
   const style = DEFAULT_STYLE();
   for (const text of inputTexts(messages)) {
+    if (/^(?:ช่วย)?(?:ลืม|ไม่ต้องจำ|อย่าจำ)(?:เรื่องที่(?:เรา|ฉัน|ผม)?(?:เคย)?เล่า|ข้อมูล(?:ของ)?(?:เรา|ฉัน|ผม)|เรื่อง(?:เรา|ฉัน|ผม)|ทั้งหมด|ทุกอย่าง|ประวัติ)(?:ทั้งหมด)?[.!\s]*$/u.test(text.trim())) {
+      facts.clear();
+      Object.assign(style, DEFAULT_STYLE());
+      continue;
+    }
     // Hostile quoted instructions do not become either facts or preferences.
     if (UNSAFE_FACT.test(text)) continue;
     readStyle(text, style);

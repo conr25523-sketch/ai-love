@@ -5,6 +5,13 @@ import { buildConversationMemory, memoryRecallReply, applyMemoryStyle } from './
 const user = content => ({ role: 'user', content });
 const assistant = content => ({ role: 'assistant', content });
 
+test('explicit conversational forget removes older facts and style without global state', () => {
+  const memory = buildConversationMemory([user('เราชอบคณิต ไม่ต้องถาม'), user('ลืมเรื่องที่เราเล่า'), user('เราอยากมีอิสระ')]);
+  assert.deepEqual(memory.facts.map(fact => fact.topic), ['อิสระ']);
+  assert.equal(memory.style.questions, 'normal');
+  assert.equal(buildConversationMemory([user('เราชอบคณิต')]).facts.length, 1);
+});
+
 test('extracts explicit user interests, ability, and goals only', () => {
   const memory = buildConversationMemory([
     assistant('คุณชอบฟิสิกส์'), user('คือเราชอบคณิต'), user('ฉันเก่งภาษาอังกฤษ'),

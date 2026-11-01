@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createBackend } from '../lib/backend.ts';
 import { buildReflectionReply } from '../core/persona.mjs';
+import { generateProviderReply } from '../lib/ai-provider.mjs';
 import { drawTarotCards } from '../core/tarot-deck.mjs';
 import { resolveVisitorSession, logoutVisitor, signInVisitor } from '../lib/visitor-session.ts';
 
@@ -49,6 +50,22 @@ function harness() {
 }
 
 const deleteAccount = (h, userId = 'alice', confirmName = 'Same Name', options = {}) => h.request('adminUsersDelete', { userId, confirmName, confirmed: true }, { method: 'DELETE', ...options });
+
+test('real local provider recalls profile names after returning without leaking another user', async t => {
+  const h = harness(); t.after(() => h.sqlite.close());
+  h.setReply(input => generateProviderReply(input, {}));
+  await h.register('เมย์');
+  const answer = async (key, text) => {
+    const response = await h.send(key, text); assert.equal(response.status, 200);
+    return (await response.json()).messages.find(message => message.role === 'assistant').content;
+  };
+  assert.match(await answer('profile_name_001', 'ฉันชื่ออะไร'), /เมย์/);
+  h.setUser('bob'); await h.register('นนท์');
+  const second = await answer('profile_name_002', 'เราชื่ออะไร');
+  assert.match(second, /นนท์/); assert.doesNotMatch(second, /เมย์/);
+  h.setUser('alice'); await h.register('เมย์');
+  assert.match(await answer('profile_name_003', 'จำชื่อเราได้ไหม'), /เมย์/);
+});
 
 test('admin permanent deletion removes exactly one profile, messages and requests despite duplicate names', async () => {
   const h = harness();
@@ -440,11 +457,28 @@ test('learning source preserves older user interests beyond the recent 20 dialog
   let observed;
   h.setReply(async (input) => { observed = input; return { content: 'รับฟังอยู่', mode: 'demo' }; });
   assert.equal((await h.send('request_memory', 'ตอนนี้เหนื่อยกับงาน')).status, 200);
-  assert.equal(observed.recentMessages.length, 20);
-  assert.equal(observed.recentMessages.some((message) => message.id === 'old_interest'), false);
+  assert.ok(observed.recentMessages.length > 20 && observed.recentMessages.length <= 200);
+  assert.equal(observed.recentMessages.some((message) => message.id === 'old_interest'), true);
   assert.deepEqual(observed.learningMessages.map((message) => message.content), ['ฉันชอบปลูกต้นไม้', 'ตอนนี้เหนื่อยกับงาน']);
   assert.ok(observed.learningMessages.every((message) => message.role === 'user'));
   assert.equal(observed.learningMessages.at(-1).content, observed.text);
+});
+
+test('saved selected tarot card survives the short dialogue window and profile switching', async t => {
+  const h = harness(); t.after(() => h.sqlite.close());
+  h.setReply(input => generateProviderReply(input, {}));
+  await h.register('เมย์');
+  const messages = (await (await h.request('messagesGet')).json()).messages;
+  const invitation = messages.find(message => message.role === 'assistant' && message.content.includes('เลือกไพ่หนึ่งใบ'));
+  const expected = drawTarotCards(invitation.id)[1];
+  assert.equal((await h.send('saved_card_choice', 'เราเลือกไพ่ใบที่ 2')).status, 200);
+  for (let i = 0; i < 30; i++) seedMessage(h, { id: `card_window_${i}`, role: i % 2 ? 'assistant' : 'user', content: 'คุยเรื่องทั่วไป', createdAt: 2000000000100 + i });
+  h.tick(1000);
+  const result = await (await h.send('saved_card_recall', 'เราได้ไพ่อะไร')).json();
+  assert.ok(result.messages.find(message => message.role === 'assistant').content.includes(expected.name));
+  h.setUser('bob'); await h.register('นนท์');
+  const other = await (await h.send('other_card_recall', 'เราได้ไพ่อะไร')).json();
+  assert.doesNotMatch(other.messages.find(message => message.role === 'assistant').content, /คุณได้ไพ่ “/);
 });
 
 test('learning source is bounded to latest 200 user rows in chronological order', async () => {

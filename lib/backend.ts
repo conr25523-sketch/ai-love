@@ -184,7 +184,9 @@ export function createBackend(deps: BackendDependencies) {
     let reply: { content: string; mode: "demo" | "ai" };
     try {
       const [recent, learning] = await Promise.all([recentMessages(id), learningMessages(id)]);
-      reply = await deps.reply({ text: content, recentMessages: recent.slice(-20), learningMessages: learning, name: user.name });
+      // This caller's bounded saved dialogue also carries the selected card.
+      // The provider bounds ordinary conversational history independently.
+      reply = await deps.reply({ text: content, recentMessages: recent, learningMessages: learning, name: user.name });
       if (!reply.content.trim() || reply.content.length > 16000 || !["demo", "ai"].includes(reply.mode)) throw new Error("Invalid provider response");
       // The demo can use the caller's saved user statements beyond the recent
       // twenty-message chat window. Guesses stay replies, never profile facts.

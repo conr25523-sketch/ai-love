@@ -15,6 +15,8 @@ import { requestedAnswerReply } from './requested-answer.mjs';
 import { symbolicCardReply } from './symbolic-cards.mjs';
 import { analyzeTurnIntent } from './turn-intent.mjs';
 import { reflectiveDiscussionReply } from './reflective-discussion.mjs';
+import { conversationSupportReply, conversationFallbackReply } from './conversation-support.mjs';
+import { arithmeticReply } from './arithmetic.mjs';
 export const SYSTEM_PROMPT = `คุณคือ “ม่านใจ” ผู้ช่วยสนทนาเพื่อสำรวจความคิดและความรู้สึก พูดภาษาไทยแบบคุยกัน เป็นกันเอง และตรงไปตรงมา
 
 บุคลิก: รับฟังโดยไม่ตัดสิน ให้พื้นที่กับความรู้สึก ใช้คำธรรมดา และไม่ทำตัวเป็นผู้รู้ชีวิตผู้ใช้ทั้งหมด
@@ -147,6 +149,15 @@ function topicOf(text) {
 }
 
 function safetyReply(text) {
+  // English intent must be explicit: idioms such as "this deadline is killing me"
+  // and "I'm dying to see it" do not establish a wish to cause harm.
+  if (/\bi\s+(?:want|plan|am going|intend)\s+to\s+(?:kill myself|end my life|hurt myself|kill someone|hurt someone|die)\b/iu.test(text)
+      || /\bi (?:have|just)?\s*(?:taken|took) an overdose\b/iu.test(text)) {
+    const imminent = /\boverdose|right now|tonight|already|have a (?:gun|knife)\b/iu.test(text);
+    return imminent
+      ? 'I’m glad you told me. This sounds painful, and you shouldn’t have to face this moment alone. Please contact local emergency services or go to an emergency department now, and ask someone you trust to stay with you. Move away from anything you could use to hurt yourself or someone else, if you can do so safely. Is someone able to stay with you right now?'
+      : 'I’m glad you told me how hard this is. I want to help you stay safe while we talk. Are you in immediate danger of acting on these thoughts? If you might act now, contact local emergency services and ask someone you trust to stay with you.';
+  }
   // Deliberate expressions of self-harm or violence, including requests about someone else.
   const selfHarm = /ฆ่าตัวตาย|ทำร้ายตัวเอง|อยากตาย|ไม่อยากมีชีวิต|ไม่อยากอยู่แล้ว|อยากหายไปตลอด|จบชีวิต|กินยาเกินขนาด|กรีดแขน/;
   const violence = /(?:จะ|อยาก|ตั้งใจ)(?:ไป)?(?:ฆ่า|ทำร้าย)(?:เขา|เธอ|คนอื่น|แฟน|ใคร|คน)/;
@@ -156,9 +167,9 @@ function safetyReply(text) {
     return 'ขอบคุณที่ชี้แจงเรื่องความตั้งใจทำร้าย เราจะยึดตามที่คุณบอก และไม่สรุปแทนคุณ ตอนนี้คุณอยากให้ช่วยฟังเรื่องใดมากที่สุด?';
   }
   if (/กินยาเกินขนาด|ลงมือแล้ว|เลือดออก|ทำร้ายตัวเองแล้ว|กำลังจะ|จะลงมือ|มี(?:มีด|ปืน)|ถือ(?:มีด|ปืน)/.test(text)) {
-    return 'เราเป็นห่วงความปลอดภัยจากสิ่งที่คุณเล่า หากคุณหรือใครกำลังบาดเจ็บ กินยาเกินขนาด หรือใกล้ลงมือ ให้ติดต่อบริการฉุกเฉินในพื้นที่หรือไปห้องฉุกเฉินทันที ขอให้คนที่ไว้ใจมาอยู่ด้วยและช่วยติดต่อ หากทำได้อย่างปลอดภัย ให้ออกห่างจากสิ่งที่อาจใช้ทำร้ายตัวเองหรือผู้อื่น ตอนนี้คุณอยู่ในที่ปลอดภัยและมีใครอยู่ด้วยได้ไหม?';
+    return 'ขอบคุณที่บอกเรานะ สิ่งที่คุณกำลังเจอมันหนัก และคุณไม่ควรต้องรับช่วงนี้คนเดียว ถ้าคุณหรือใครกำลังบาดเจ็บ กินยาเกินขนาด หรือใกล้ลงมือ ให้ติดต่อบริการฉุกเฉินในพื้นที่หรือไปห้องฉุกเฉินทันที ขอให้คนที่ไว้ใจมาอยู่ด้วยและช่วยติดต่อ ถ้าทำได้อย่างปลอดภัย ให้ออกห่างจากสิ่งที่อาจใช้ทำร้ายตัวเองหรือผู้อื่น ตอนนี้มีคนที่ไว้ใจมาอยู่ด้วยได้ไหม?';
   }
-  return 'ขอบคุณที่บอกเรื่องนี้ เราเป็นห่วงความปลอดภัยของคุณและคนที่เกี่ยวข้อง หากรู้สึกว่าจะลงมือ ให้ติดต่อบริการฉุกเฉินในพื้นที่หรือไปห้องฉุกเฉิน และขอให้คนที่ไว้ใจมาอยู่ด้วย หากทำได้อย่างปลอดภัย ให้ออกห่างจากสิ่งที่อาจใช้ทำร้าย ตอนนี้มีใครเสี่ยงจะได้รับอันตรายทันทีไหม?';
+  return 'ขอบคุณที่บอกเรานะ ฟังดูเป็นช่วงที่หนักมาก เราอยากรับฟังและช่วยดูแลความปลอดภัยของคุณกับคนที่เกี่ยวข้องก่อน ตอนนี้คุณหรือคนอื่นกำลังเสี่ยงได้รับอันตรายทันทีไหม? ถ้ารู้สึกว่าจะลงมือ ให้ติดต่อบริการฉุกเฉินในพื้นที่หรือไปห้องฉุกเฉิน และขอให้คนที่ไว้ใจมาอยู่ด้วย ถ้าทำได้อย่างปลอดภัย ให้ออกห่างจากสิ่งที่อาจใช้ทำร้าย';
 }
 
 /** A conversational greeting; runtime mode remains visible in the interface. */
@@ -231,7 +242,7 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
       ? `${acknowledge} ${buildReflectionReply(revised, recentMessages, { ...options, suppressImagery: true })}`
       : acknowledge;
   }
-  if (/อ่านใจ|รู้ได้ไง|รู้ได้อย่างไร|ทำนาย|แม่น|เป็น\s*ai|ใช้\s*ai|เป็นเอไอ|ใช้เอไอ|ตอบด้วยอะไร/i.test(current)) {
+  if (/อ่านใจ|รู้ได้ไง|รู้ได้อย่างไร|แม่น|เป็น\s*ai|ใช้\s*ai|เป็นเอไอ|ใช้เอไอ|ตอบด้วยอะไร/i.test(current)) {
     return 'ตอนนี้เราตอบด้วยกฎจากข้อความที่คุณพิมพ์ ยังไม่ได้เชื่อมโมเดล AI จริง สิ่งที่สะท้อนจึงอาจไม่ตรงกับคุณ และไม่ได้มาจากการอ่านใจหรือทำนายอนาคต';
   }
   const interpreted = interpretationText(analysis);
@@ -263,8 +274,12 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
   }
   const explanation = explainSearch(current, recentMessages, lastAnswer);
   if (explanation) return explanation;
-  const card = symbolicCardReply(current, recentMessages);
+  const card = symbolicCardReply(/ทำนาย/u.test(current) && !/คืออะไร|ทำงาน|ไม่(?:ต้อง|อยาก)/u.test(current) ? `เปิดไพ่ ${current}` : current, recentMessages);
   if (card && !prefersListeningOnly(current, recentMessages)) return card;
+  const calculation = arithmeticReply(current);
+  if (calculation) return calculation;
+  const support = conversationSupportReply(raw, recentMessages);
+  if (support) return support;
   // Concrete requests and explicit figurative discussion take precedence over
   // broad topics. Context may enrich an answer, but must not replace the task.
   const requested = prefersListeningOnly(current, recentMessages) ? null : requestedAnswerReply(current, recentMessages, options);
@@ -383,8 +398,5 @@ export function buildReflectionReply(text, recentMessages = [], options = {}) {
     return reflect(choose(['ฟังดูเหมือนมีอะไรทำให้ไม่สบายใจหรือค้างใจอยู่ เรายังไม่อยากสรุปแทนคุณว่าความรู้สึกนั้นคืออะไรทั้งหมด', 'เรื่องนี้อาจวนอยู่ในใจคุณบ้าง เราจะยังไม่รีบตีความว่าเป็นเพราะใครหรือบอกให้หยุดคิดทันที']));
   }
   // An unsupported subject is not evidence of distress or a life decision.
-  return dialogueContextFallback(raw, recentMessages) || choose([
-    'เรื่องนี้เราไม่รู้คำตอบที่แน่ชัด เลยไม่อยากเดาให้ผิดเรื่อง',
-    'เรื่องนี้เราอาจยังเข้าใจไม่ตรง เลยยังสรุปให้แบบมั่นใจไม่ได้',
-  ]);
+  return dialogueContextFallback(raw, recentMessages) || conversationFallbackReply(raw, recentMessages);
 }

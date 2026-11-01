@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createBackend } from '../lib/backend.ts';
-import { buildReflectionReply } from '../core/persona.mjs';
-import { buildConversationMemory, applyMemoryStyle } from '../core/conversation-memory.mjs';
+import { generateProviderReply } from '../lib/ai-provider.mjs';
 
 // Actual SQL, history selection and delivery path. Synthetic local identities;
-// a deterministic reply dependency keeps these tests independent of API access.
+// the real deterministic provider keeps these tests independent of API access.
 function conversation() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec('PRAGMA foreign_keys = ON');
@@ -32,11 +31,7 @@ function conversation() {
   };
   let clock = 2000000000000, turn = 0;
   const backend = createBackend({ db, getUserId: async () => 'review', adminIds: [], mode: () => 'demo', now: () => ++clock,
-    reply: async ({ text, recentMessages, learningMessages }) => {
-      const previous = recentMessages.at(-1)?.content === text && recentMessages.at(-1)?.role === 'user' ? recentMessages.slice(0,-1) : recentMessages;
-      const memory = buildConversationMemory(learningMessages);
-      return { content: applyMemoryStyle(buildReflectionReply(text, previous, { memory }), text, memory), mode: 'demo' };
-    },
+    reply: input => generateProviderReply(input, {}),
   });
   const request = (operation, body) => backend.handle(operation, new Request('https://local-review.test/api/test', {
     method: 'POST', headers: { origin: 'https://local-review.test', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -73,6 +68,24 @@ test('persisted opinion receives a relevant discussion and followups keep its to
   assert.notEqual(expanded, reply);
   assert.doesNotMatch(expanded, /ไม่รู้คำตอบ|รายละเอียดไม่พอ|เรื่องงานหรือการเรียน/);
   assert.equal(await chat.say('4545454-45='), '4545454-45 = 4545409');
+});
+
+test('composer suggestions perform listening, advice and elaboration on the saved work problem', async t => {
+  const chat = conversation(); t.after(() => chat.close()); await chat.start();
+  const first = await chat.say('เครียดเพราะหัวหน้าเปลี่ยนงานก่อนส่งพรุ่งนี้');
+  assert.match(first, /หัวหน้า|ก่อนส่ง/);
+  assert.equal((first.match(/[?？]/gu) || []).length, 1);
+  await chat.say('ตอนนี้ขอระบายก่อน ยังไม่ต้องแนะนำ');
+  const heard = await chat.say('เราทำใหม่มาแล้วสองรอบ เขาก็เปลี่ยนอีก');
+  assert.match(heard, /รอบ|แก้|เปลี่ยน|ทำใหม่/);
+  assert.doesNotMatch(heard, /\?/);
+  const advice = await chat.say('ช่วยคิดทางออกจากเรื่องที่เราเล่าให้หน่อย');
+  assert.match(advice, /แก้|ส่ง|หัวหน้า|ขอบเขต/);
+  assert.doesNotMatch(advice, /^ก่อนหน้านี้คุณเล่าว่า|ไม่รู้คำตอบ|เราพักคำแนะนำ/);
+  const expanded = await chat.say('ช่วยขยายความคำตอบเมื่อกี้ให้เข้าใจง่ายขึ้นหน่อย');
+  assert.notEqual(expanded, advice);
+  assert.match(expanded, /แก้|ส่ง|หัวหน้า|ขอบเขต/);
+  assert.doesNotMatch(expanded, /รับความหมายคลาดเคลื่อน|ลองเล่าอีกแบบ|ไม่รู้คำตอบ/);
 });
 
 test('persisted delivery drafts from the corrected issue rather than an earlier assistant assumption', async t => {
