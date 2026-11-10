@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, Check, ChevronRight, CircleHelp, Heart, History, LoaderCircle, LogOut, Menu, MessageCircle, Moon, ShieldCheck, Sparkles, Star, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, ChevronRight, CircleHelp, Heart, History, LoaderCircle, LogOut, Menu, MessageCircle, Moon, ShieldCheck, Sparkles, Star, Swords, Trash2, X } from "lucide-react";
 import { drawTarotCards } from "../core/tarot-deck.mjs";
+import { MODE_REQUEST, modeChoiceFor } from "../core/reading-markers.mjs";
 import { conversationSuggestions } from "../core/conversation-navigation.mjs";
 import DeleteUserButton from "../components/delete-user-button";
 import { adminUrl, chatFetch, homeUrl } from "../lib/pages-client";
@@ -133,6 +134,9 @@ export default function Home() {
   const chosenCard = savedCardNumber ?? (cardRound ? cardSelections[cardRound.id]?.number ?? null : null);
   const selectedTarotCard = cardRound && savedCardNumber ? (drawTarotCards(cardRound.id) as DrawnTarotCard[])[savedCardNumber - 1] : null;
   const suggestions = useMemo(() => conversationSuggestions(messages), [messages]);
+  // After a reading insight the user picks how to hear on: cups (comfort) or swords (hard truth).
+  const lastMessage = messages.at(-1);
+  const modeChoice = lastMessage?.role === "assistant" ? modeChoiceFor(lastMessage.content) : null;
 
   function useSuggestion(content: string) {
     if (busy || retry || draft.trim()) return;
@@ -309,6 +313,10 @@ export default function Home() {
         </div>
         <div className="composer-area">
           {selectedTarotCard && <p className="conversation-card-context"><Sparkles size={12} aria-hidden="true" /> ไพ่ที่เลือกไว้: {selectedTarotCard.title}</p>}
+          {modeChoice && !busy && !retry && <div className="reading-mode-choice" role="group" aria-label="เลือกวิธีฟังคำทำนายต่อ">
+            <button type="button" className={`reading-mode-button ${modeChoice.recommended === "cups" ? "is-recommended" : ""}`} onClick={() => void send({ content: MODE_REQUEST.cups, requestId: crypto.randomUUID() })}><Heart size={18} aria-hidden="true" /><span><strong>ไพ่ถ้วย</strong><small>กำลังใจและการปลอบ{modeChoice.recommended === "cups" ? " · แนะนำ" : ""}</small></span></button>
+            {modeChoice.swords && <button type="button" className={`reading-mode-button swords ${modeChoice.recommended === "swords" ? "is-recommended" : ""}`} onClick={() => void send({ content: MODE_REQUEST.swords, requestId: crypto.randomUUID() })}><Swords size={18} aria-hidden="true" /><span><strong>ไพ่ดาบ</strong><small>ความจริงตรง ๆ ที่อาจแสบ{modeChoice.recommended === "swords" ? " · แนะนำ" : ""}</small></span></button>}
+          </div>}
           {!busy && !retry && !draft.trim() && suggestions.length > 0 && <div className="conversation-navigation" role="group" aria-label="เลือกแนวทางคุยต่อ เติมข้อความแล้วกดส่งได้">
             {suggestions.map(suggestion => <button key={suggestion.id} type="button" onClick={() => useSuggestion(suggestion.content)} aria-label={`${suggestion.label} — เติมในช่องข้อความ`}>{suggestion.label}</button>)}
           </div>}

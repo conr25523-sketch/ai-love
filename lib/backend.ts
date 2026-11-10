@@ -1,6 +1,7 @@
 import { formatReplyLines } from "../core/reply-layout.mjs";
 import { requestedAnswerReply } from "../core/requested-answer.mjs";
-import { symbolicCardReply, FIRST_TAROT_INVITATION } from "../core/symbolic-cards.mjs";
+import { FIRST_TAROT_INVITATION } from "../core/symbolic-cards.mjs";
+import { cardChoiceReply } from "../core/reading-flow.mjs";
 
 export type Message = { id: string; role: "user" | "assistant"; content: string; createdAt: number };
 type Profile = { id: string; name: string; consent_admin: number };
@@ -193,7 +194,7 @@ export function createBackend(deps: BackendDependencies) {
       if (reply.mode === "demo") {
         const previous = recent.at(-1)?.role === "user" && recent.at(-1)?.content === content ? recent.slice(-20, -1) : recent.slice(-20);
         // Preserve persisted invitation IDs for the same spread in server + UI.
-        const selectedCard = /^เราเลือกไพ่ใบที่\s*[1-3]/u.test(content) ? symbolicCardReply(content, previous) : null;
+        const selectedCard = /^เราเลือกไพ่ใบที่\s*[1-3]/u.test(content) ? cardChoiceReply(content, previous) : null;
         reply = { ...reply, content: selectedCard ?? requestedAnswerReply(content, previous, { userStatements: learning }) ?? reply.content };
       }
       reply = { ...reply, content: formatReplyLines(reply.content, { text: content, messages: recent.slice(-20) }) };

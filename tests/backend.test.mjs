@@ -259,7 +259,9 @@ test('demo tarot choice persists through the existing request and history flow',
   const picked=await (await h.send('request_tarot_pick','เราเลือกไพ่ใบที่ 2')).json();
   const answer=picked.messages.find(message=>message.role==='assistant').content;
   assert.ok(answer.includes(drawTarotCards(invitation.id)[1].name));
-  assert.doesNotMatch(answer,/[?？]/);
+  // The reading is followed by exactly one probe question that opens the deeper round.
+  assert.equal((answer.match(/[?？]/gu)||[]).length,1);
+  assert.ok(answer.trim().endsWith('?'));
   const retry=await (await h.send('request_tarot_pick','เราเลือกไพ่ใบที่ 2')).json();
   assert.equal(retry.messages.find(message=>message.role==='assistant').content,answer);
   assert.equal(h.calls(),2);
@@ -509,7 +511,9 @@ test('saved Chariot and a three-year breakup stay on topic with validation befor
   const next = await send('breakup_topic_002', 'เรายังคิดถึงเขาอยู่');
   assert.doesNotMatch(next, /บริษัท|คำพิพากษา|สิ่งที่ต้องฝึก|ถ้ามองผ่านภาพไพ่/);
   assert.doesNotMatch(next, /การจบความสัมพันธ์ที่คบมา|คุณบอกว่ายังเสียใจ/);
-  assert.doesNotMatch(next, /[?？]/);
+  // The reading round now asks one deeper question per turn (layer 3: feeling and its weight).
+  assert.equal((next.match(/[?？]/gu) || []).length, 1);
+  assert.match(next, /หนักแค่ไหนจาก 1 ถึง 10|ความหนักตั้งแต่ 1 ถึง 10|กี่คะแนนจาก 10/);
   assert.equal(await send('breakup_topic_003', '1+1='), '1+1 = 2');
 });
 

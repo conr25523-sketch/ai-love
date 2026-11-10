@@ -48,3 +48,14 @@
 .message-text,.composer textarea,.text-input,.conversation-navigation button,.conversation-card-context{font-family:var(--font-sans);letter-spacing:normal;word-spacing:normal;word-break:normal;line-break:auto;font-feature-settings:normal;font-kerning:normal}
 .message-text{overflow-wrap:break-word;line-height:2;padding-block:2px}
 .composer textarea{overflow-wrap:break-word;line-height:1.9;padding-bottom:6px}
+/* Reading round: choose how to hear the insight (cups = comfort, swords = hard truth). */
+.reading-mode-choice{display:flex;gap:9px;flex-wrap:wrap;margin:0 0 10px}
+.reading-mode-button{flex:1 1 190px;min-height:56px;display:flex;align-items:center;gap:11px;text-align:left;border-radius:18px;padding:10px 15px;background:#302037;border:1px solid #c8a6d240;color:#e0cbe8;font-family:var(--font-sans);line-height:1.6}
+.reading-mode-button strong{display:block;font-size:14px;font-weight:600;color:#f3e3f4}
+.reading-mode-button small{display:block;font-size:11px;color:#bda5ca}
+.reading-mode-button svg{flex-shrink:0;color:#efc1e2}
+.reading-mode-button:hover{background:#442c50;border-color:#d8b1e680}
+.reading-mode-button.swords svg{color:#b8c7ee}
+.reading-mode-button.is-recommended{border-color:#efc1e2b3;box-shadow:0 0 0 1px #efc1e233}
+.reading-mode-button:focus-visible{outline:2px solid #efc1e2;outline-offset:3px}
+@media(max-width:650px){.reading-mode-choice{gap:7px}.reading-mode-button{flex-basis:100%;min-height:52px}}

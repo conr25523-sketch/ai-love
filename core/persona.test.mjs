@@ -51,7 +51,8 @@ test('acute risk takes priority over regular work and relationship replies', () 
   const reply = buildReflectionReply('งานไม่ไหว กินยาเกินขนาดแล้ว');
   assert.match(reply, /ฉุกเฉินทันที/);
   assert.match(reply, /คนที่ไว้ใจ/);
-  assert.doesNotMatch(reply, /\b\d{3,}\b/);
+  // Only the two verified Thai public lines may appear; no other number is ever invented.
+  assert.deepEqual(reply.match(/\b\d{3,}\b/g), ['1323', '1669']);
 });
 
 test('risk without explicit immediate action asks about present safety', () => {

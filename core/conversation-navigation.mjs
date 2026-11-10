@@ -1,4 +1,5 @@
 import { arithmeticReply } from './arithmetic.mjs';
+import { modeChoiceFor } from './reading-markers.mjs';
 
 // Navigation is optional and never sends a message or infers why a user is quiet.
 /** @param {Array<{role: string, content: string}>} messages */
@@ -14,6 +15,8 @@ export function conversationSuggestions(messages = []) {
   const urgent = /(?:ฆ่าตัวตาย|ทำร้ายตัวเอง|อยากตาย|ไม่อยาก(?:มีชีวิต|อยู่)|กรีดแขน|ยาเกินขนาด|suicid|self[ -]?harm|(?:kill|hurt|harm)\s+myself|want\s+to\s+die|(?:don['’]?t|do not|no longer)\s+want\s+to\s+(?:live|be alive|exist)|end\s+my\s+life|overdos|in\s+immediate\s+danger)/iu;
   if (recent.filter(message => message.role === 'user').slice(-3).some(message => urgent.test(message.content))) return [];
   if (/เลือกไพ่หนึ่งใบจากสามใบด้านล่าง/u.test(last.content)) return [];
+  // The two reading cards are the only choice offered after an insight.
+  if (modeChoiceFor(last.content)) return [];
   const emotional = /(?:เครียด|เหนื่อย|เศร้า|เสียใจ|น้อยใจ|กังวล|กลัว|ทุกข์|เบื่อ|กดดัน|ร้องไห้|เหงา|ท้อ|หนักใจ|ไม่ไหว|sad|stress|lonely|overwhelm|anxious)/iu.test(text);
   const reflection = /(?:เป้าหมาย|ชีวิต|อิสระ|ความสัมพันธ์|ความรู้สึก|อนาคต|ค้นหาตัวเอง|เลือกไพ่ใบที่)/u.test(text);
   const suggestions = [];

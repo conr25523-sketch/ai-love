@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { localEnvironment, parseLocalArgs, prepareLocalRuntime } from './local-config.mjs';
@@ -23,7 +23,19 @@ try {
     Object.assign(process.env, environment);
     for (const key of Object.keys(process.env)) if (!(key in environment)) delete process.env[key];
     process.chdir(root);
-    process.argv = [process.execPath, path.join(root, 'node_modules/vite/bin/vite.js'), '--config', path.join(root, 'vite.local.config.ts')];
+    // The root index.html is the GitHub Pages build output (it points at /ai-love/pages-assets/...).
+    // While it exists the dev server serves it at "/" instead of the app, so set it aside for this
+    // run and put it back on exit. A hard kill leaves it held; the next start restores it first.
+    const pagesIndex = path.join(root, 'index.html');
+    const heldIndex = path.join(root, 'index.html.local-hold');
+    if (existsSync(heldIndex) && !existsSync(pagesIndex)) renameSync(heldIndex, pagesIndex);
+    if (existsSync(pagesIndex)) {
+      renameSync(pagesIndex, heldIndex);
+      const restore = () => { try { if (existsSync(heldIndex) && !existsSync(pagesIndex)) renameSync(heldIndex, pagesIndex); } catch { /* best effort */ } };
+      process.on('exit', restore);
+      for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => process.exit(0));
+    }
+    process.argv =[process.execPath, path.join(root, 'node_modules/vite/bin/vite.js'), '--config', path.join(root, 'vite.local.config.ts')];
     console.log(`Local only: http://127.0.0.1:${port} · owner sign-in is simulated; external AI is disabled.`);
     await import(new URL('../node_modules/vite/bin/vite.js', import.meta.url).href);
   }
